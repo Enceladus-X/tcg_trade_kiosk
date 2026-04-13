@@ -1,0 +1,123 @@
+'use client'
+
+import { useState, useCallback } from 'react'
+import { Delete, Lock } from 'lucide-react'
+
+interface PinAuthOverlayProps {
+  onSuccess: () => void
+  onCancel: () => void
+}
+
+const CORRECT_PIN = '1234' // In production, this would be stored securely
+
+export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState(false)
+
+  const handleNumberClick = useCallback((num: string) => {
+    if (pin.length < 4) {
+      const newPin = pin + num
+      setPin(newPin)
+      setError(false)
+
+      if (newPin.length === 4) {
+        if (newPin === CORRECT_PIN) {
+          onSuccess()
+        } else {
+          setError(true)
+          setTimeout(() => {
+            setPin('')
+            setError(false)
+          }, 500)
+        }
+      }
+    }
+  }, [pin, onSuccess])
+
+  const handleDelete = useCallback(() => {
+    setPin(prev => prev.slice(0, -1))
+    setError(false)
+  }, [])
+
+  const handleClear = useCallback(() => {
+    setPin('')
+    setError(false)
+  }, [])
+
+  return (
+    <div 
+      className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
+      <div className="flex w-72 flex-col items-center gap-6 rounded-2xl bg-zinc-900 p-6">
+        {/* Lock Icon */}
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
+          <Lock className="h-8 w-8 text-zinc-400" />
+        </div>
+
+        {/* Title */}
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-white">Admin Access</h3>
+          <p className="text-sm text-zinc-500">Enter 4-digit PIN</p>
+        </div>
+
+        {/* PIN Dots */}
+        <div className="flex gap-3">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={`h-4 w-4 rounded-full transition-all duration-150 ${
+                error
+                  ? 'animate-pulse bg-red-500'
+                  : pin.length > i
+                    ? 'bg-amber-500'
+                    : 'bg-zinc-700'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Numpad */}
+        <div className="grid w-full grid-cols-3 gap-2">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+            <button
+              key={num}
+              onClick={() => handleNumberClick(num)}
+              className="flex h-14 items-center justify-center rounded-xl bg-zinc-800 text-xl font-semibold text-white transition-all hover:bg-zinc-700 active:scale-95"
+            >
+              {num}
+            </button>
+          ))}
+          <button
+            onClick={handleClear}
+            className="flex h-14 items-center justify-center rounded-xl bg-zinc-800 text-sm font-medium text-zinc-400 transition-all hover:bg-zinc-700 active:scale-95"
+          >
+            Clear
+          </button>
+          <button
+            onClick={() => handleNumberClick('0')}
+            className="flex h-14 items-center justify-center rounded-xl bg-zinc-800 text-xl font-semibold text-white transition-all hover:bg-zinc-700 active:scale-95"
+          >
+            0
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex h-14 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition-all hover:bg-zinc-700 active:scale-95"
+          >
+            <Delete className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Cancel */}
+        <button
+          onClick={onCancel}
+          className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,16 @@
+# Dependencies
+node_modules
+
+# Next.js
+.next/
+next-env.d.ts
+
+# Environment variables
+.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
