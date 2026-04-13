@@ -1,5 +1,4 @@
-// Mock card data for the prototype
-// In production, this would come from a database
+// Card data - source: 유희왕_매입스프레드_시트.xlsx
 
 export interface CardPrice {
   rarity: 'N' | 'R' | 'SR' | 'UR' | 'UL' | 'SE' | 'PSR'
@@ -10,12 +9,11 @@ export interface Card {
   id: string
   name: string
   code: string
-  category: string // 확장팩/세트 이름
+  category: string
   imageUrl: string
   prices: CardPrice[]
 }
 
-// Available categories (expansion sets)
 export const cardCategories = [
   '전체',
   '블레이징 도미니언',
@@ -34,18 +32,16 @@ export interface CartItem {
   quantity: number
 }
 
-// Extended Card with enabled/disabled state for "매입 중지"
 export interface CardWithStatus extends Card {
-  isStopped: boolean // true if ALL rarities are disabled (매입 중지)
-  enabledRarities: Record<string, boolean> // per-rarity toggle
+  isStopped: boolean
+  enabledRarities: Record<string, boolean>
 }
 
-// Pending Order for admin dashboard - designed for easy DB mapping
 export type OrderStatus = 'pending' | 'approved' | 'paid' | 'rejected'
 
 export interface PendingOrder {
   id: string
-  createdAt: string // ISO timestamp
+  createdAt: string
   customerName: string
   bankName: string
   accountNumber: string
@@ -55,7 +51,6 @@ export interface PendingOrder {
   status: OrderStatus
 }
 
-// Customer checkout form data
 export interface CheckoutFormData {
   name: string
   bankName: string
@@ -63,25 +58,22 @@ export interface CheckoutFormData {
   phoneLast4: string
 }
 
-// Rarity color mapping for visual distinction
 export const rarityColors: Record<string, { bg: string; text: string; border: string }> = {
-  N: { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' },
-  R: { bg: 'bg-blue-900', text: 'text-blue-200', border: 'border-blue-700' },
-  SR: { bg: 'bg-amber-900', text: 'text-amber-200', border: 'border-amber-700' },
-  UR: { bg: 'bg-rose-900', text: 'text-rose-200', border: 'border-rose-700' },
-  UL: { bg: 'bg-purple-900', text: 'text-purple-200', border: 'border-purple-700' },
-  SE: { bg: 'bg-emerald-900', text: 'text-emerald-200', border: 'border-emerald-700' },
-  PSR: { bg: 'bg-sky-900', text: 'text-sky-200', border: 'border-sky-700' },
+  N:   { bg: 'bg-zinc-700',    text: 'text-zinc-200',   border: 'border-zinc-600' },
+  R:   { bg: 'bg-blue-900',    text: 'text-blue-200',   border: 'border-blue-700' },
+  SR:  { bg: 'bg-amber-900',   text: 'text-amber-200',  border: 'border-amber-700' },
+  UR:  { bg: 'bg-rose-900',    text: 'text-rose-200',   border: 'border-rose-700' },
+  UL:  { bg: 'bg-purple-900',  text: 'text-purple-200', border: 'border-purple-700' },
+  SE:  { bg: 'bg-emerald-900', text: 'text-emerald-200',border: 'border-emerald-700' },
+  PSR: { bg: 'bg-sky-900',     text: 'text-sky-200',    border: 'border-sky-700' },
 }
 
-// Helper: 가격이 있는 레어도만 CardPrice 배열로 변환
 function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPrice[] {
   return (Object.entries(raw) as [CardPrice['rarity'], number][])
     .filter(([, price]) => price > 0)
     .map(([rarity, price]) => ({ rarity, price }))
 }
 
-// Helper: 가격 있는 레어도 = enabled, 없는 = disabled
 function makeEnabledRarities(prices: CardPrice[]): Record<string, boolean> {
   const all: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR']
   const priced = new Set(prices.map(p => p.rarity))
@@ -109,6 +101,7 @@ function makeCard(
 }
 
 // 블레이징 도미니언 (BLZD) - 유희왕_매입스프레드_시트.xlsx 기준
+// 컬럼 매핑: C=N, D=R, E=SR, F=UR, G=UL, H=SE, I=PSR
 export const mockCards: CardWithStatus[] = [
   makeCard('BLZD-KR002', '파워 바이스드래곤',            '블레이징 도미니언', { SR: 700,   SE: 2500              }),
   makeCard('BLZD-KR014', '엘펜노츠 레기나',              '블레이징 도미니언', { SR: 500,   SE: 2500,  PSR: 30000 }),
@@ -118,25 +111,24 @@ export const mockCards: CardWithStatus[] = [
   makeCard('BLZD-KR021', '킬러튠 로터리',                '블레이징 도미니언', { SR: 500,   SE: 4000,  PSR: 25000 }),
   makeCard('BLZD-KR024', '피드라울리스＝하르모니아',      '블레이징 도미니언', { UL: 30000, SE: 40000, PSR: 80000 }),
   makeCard('BLZD-KR027', '혈수용희 드라세레아',           '블레이징 도미니언', {            SE: 1500,  PSR: 10000 }),
-  makeCard('BLZD-KR010', '혼절감옥신 비도리움',           '블레이징 도미니언', { R: 1500,              PSR: 12000 }),
+  makeCard('BLZD-KR010', '혼절감옥신 비도리움',           '블레이징 도미니언', { UR: 1500,             PSR: 12000 }),
   makeCard('BLZD-KR015', '크라운클랜 플레어',             '블레이징 도미니언', {            SE: 400,   PSR: 4500  }),
   makeCard('BLZD-KR015B','크라운클랜 화이트페이스',        '블레이징 도미니언', {                                  }),
   makeCard('BLZD-KR030', '레지나 데몬',                   '블레이징 도미니언', {            SE: 500               }),
   makeCard('BLZD-KR033', '페어리테일을 엮는 자',          '블레이징 도미니언', {            SE: 1800              }),
   makeCard('BLZD-KR034', '페어리테일을 이야기하는 자',    '블레이징 도미니언', {            SE: 1000,  PSR: 7000  }),
-  makeCard('BLZD-KR036', '더 크림즌 킹',                  '블레이징 도미니언', { R: 500,    SE: 2000,  PSR: 15000 }),
+  makeCard('BLZD-KR036', '더 크림즌 킹',                  '블레이징 도미니언', { UR: 500,   SE: 2000,  PSR: 15000 }),
   makeCard('BLZD-KR038', '스카레드 하이퍼노바 드래곤',    '블레이징 도미니언', { UL: 700,   SE: 1500,  PSR: 10000 }),
-  makeCard('BLZD-KR042', '킬러튠 B2B',                    '블레이징 도미니언', { R: 800,    SE: 4000,  PSR: 25000 }),
-  makeCard('BLZD-KR043', '초노급포탑열차 구스타프 로켓', '블레이징 도미니언', { R: 500,               PSR: 6000  }),
+  makeCard('BLZD-KR042', '킬러튠 B2B',                    '블레이징 도미니언', { UR: 800,   SE: 4000,  PSR: 25000 }),
+  makeCard('BLZD-KR043', '초노급포탑열차 구스타프 로켓', '블레이징 도미니언', { UR: 500,              PSR: 6000  }),
   makeCard('BLZD-KR047', '페어리테일－위캣',              '블레이징 도미니언', {            SE: 2000              }),
   makeCard('BLZD-KR048', '헤루비담 이리스필',             '블레이징 도미니언', {            SE: 1000              }),
   makeCard('BLZD-KR050', '사화요란의 령사',               '블레이징 도미니언', { UL: 4000,  SE: 7000,  PSR: 4000  }),
-  makeCard('BLZD-KR069', '초일융합',                      '블레이징 도미니언', { R: 1000,              PSR: 9000  }),
+  makeCard('BLZD-KR069', '초일융합',                      '블레이징 도미니언', { UR: 1000,             PSR: 9000  }),
   makeCard('BLZD-KR077', '도미나스 스파크',               '블레이징 도미니언', { UL: 16000, SE: 22000, PSR: 80000 }),
   makeCard('BLZD-KR079', '신의밀고',                      '블레이징 도미니언', { SR: 3500,  SE: 18000             }),
 ]
 
-// Mock pending orders for admin dashboard
 export const mockPendingOrders: PendingOrder[] = [
   {
     id: 'order-001',
@@ -173,14 +165,13 @@ export const mockPendingOrders: PendingOrder[] = [
     accountNumber: '123456-12-123456',
     phoneLast4: '9012',
     items: [
-      { cardId: 'BLZD-KR042', cardName: '킬러튠 B2B', cardCode: 'BLZD-KR042', rarity: 'R', price: 800, quantity: 3 },
+      { cardId: 'BLZD-KR042', cardName: '킬러튠 B2B', cardCode: 'BLZD-KR042', rarity: 'UR', price: 800, quantity: 3 },
     ],
     totalPrice: 2400,
     status: 'approved',
   },
 ]
 
-// Search and filter utilities
 export function searchCards(cards: CardWithStatus[], query: string): CardWithStatus[] {
   if (!query.trim()) return cards
   const lowerQuery = query.toLowerCase()
@@ -191,7 +182,6 @@ export function searchCards(cards: CardWithStatus[], query: string): CardWithSta
   )
 }
 
-// Format Korean Won
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat('ko-KR').format(price) + '원'
 }

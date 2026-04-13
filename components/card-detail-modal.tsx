@@ -126,7 +126,7 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
               <img
                 src={editImageUrl || '/placeholder-card.svg'}
                 alt={card.name}
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 h-full w-full object-contain"
                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.svg' }}
               />
             ) : (
@@ -134,7 +134,7 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
                 src={card.imageUrl || '/placeholder-card.svg'}
                 alt={card.name}
                 fill
-                className={`object-cover ${card.isStopped ? 'grayscale brightness-50' : ''}`}
+                className={`object-contain ${card.isStopped ? 'grayscale brightness-50' : ''}`}
                 sizes="(max-width: 768px) 50vw, 35vw"
                 onError={() => {}}
               />

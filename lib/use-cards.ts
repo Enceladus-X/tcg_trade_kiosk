@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { type CardWithStatus, type CardPrice, mockCards } from './mock-cards'
 
-// External store for cards - allows admin to edit cards
+// --- Cards Store ---
 type CardsStore = {
   cards: CardWithStatus[]
   listeners: Set<() => void>
@@ -14,87 +14,67 @@ const cardsStore: CardsStore = {
   listeners: new Set(),
 }
 
-function emitChange() {
-  cardsStore.listeners.forEach(listener => listener())
+function emitCardsChange() {
+  cardsStore.listeners.forEach(l => l())
 }
 
-function subscribe(listener: () => void) {
+function subscribeCards(listener: () => void) {
   cardsStore.listeners.add(listener)
   return () => cardsStore.listeners.delete(listener)
 }
 
-function getSnapshot(): CardWithStatus[] {
+function getCardsSnapshot(): CardWithStatus[] {
   return cardsStore.cards
 }
 
-// Update a card's properties
 function updateCard(cardId: string, updates: Partial<CardWithStatus>) {
   cardsStore.cards = cardsStore.cards.map(card => {
     if (card.id !== cardId) return card
-    
     const updated = { ...card, ...updates }
-    
-    // Auto-calculate isStopped based on enabled rarities
     if (updates.enabledRarities) {
-      const allDisabled = Object.values(updates.enabledRarities).every(v => !v)
-      updated.isStopped = allDisabled
+      updated.isStopped = Object.values(updates.enabledRarities).every(v => !v)
     }
-    
     return updated
   })
-  emitChange()
+  emitCardsChange()
 }
 
-// Update card image
 function updateCardImage(cardId: string, imageUrl: string) {
   updateCard(cardId, { imageUrl })
 }
 
-// Update card name
 function updateCardName(cardId: string, name: string) {
   updateCard(cardId, { name })
 }
 
-// Toggle rarity enabled/disabled
 function toggleRarity(cardId: string, rarity: string, enabled: boolean) {
   const card = cardsStore.cards.find(c => c.id === cardId)
   if (!card) return
-  
   const newEnabledRarities = { ...card.enabledRarities, [rarity]: enabled }
-  const allDisabled = Object.values(newEnabledRarities).every(v => !v)
-  
-  updateCard(cardId, { 
+  updateCard(cardId, {
     enabledRarities: newEnabledRarities,
-    isStopped: allDisabled 
+    isStopped: Object.values(newEnabledRarities).every(v => !v),
   })
 }
 
-// Update rarity price
 function updateRarityPrice(cardId: string, rarity: string, price: number) {
   const card = cardsStore.cards.find(c => c.id === cardId)
   if (!card) return
-  
-  const newPrices = card.prices.map(p =>
-    p.rarity === rarity ? { ...p, price } : p
-  )
-  
+  const exists = card.prices.find(p => p.rarity === rarity)
+  const newPrices = exists
+    ? card.prices.map(p => p.rarity === rarity ? { ...p, price } : p)
+    : [...card.prices, { rarity: rarity as CardPrice['rarity'], price }]
   updateCard(cardId, { prices: newPrices })
 }
 
-// Add a new card
 function addCard(card: Omit<CardWithStatus, 'id'>) {
-  const newCard: CardWithStatus = {
-    ...card,
-    id: `card-${Date.now()}`,
-  }
+  const newCard: CardWithStatus = { ...card, id: `card-${Date.now()}` }
   cardsStore.cards = [newCard, ...cardsStore.cards]
-  emitChange()
+  emitCardsChange()
 }
 
-// Hook to use cards state
 export function useCards() {
-  const cards = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-
+  const cards = useSyncExternalStore(subscribeCards, getCardsSnapshot, getCardsSnapshot)
   return {
     cards,
     updateCard: useCallback(updateCard, []),
@@ -103,5 +83,50 @@ export function useCards() {
     toggleRarity: useCallback(toggleRarity, []),
     updateRarityPrice: useCallback(updateRarityPrice, []),
     addCard: useCallback(addCard, []),
+  }
+}
+
+// --- Tabs Store ---
+type TabsStore = {
+  tabs: string[]
+  listeners: Set<() => void>
+}
+
+const tabsStore: TabsStore = {
+  tabs: ['블레이징 도미니언', '버스트 프로토콜'],
+  listeners: new Set(),
+}
+
+function emitTabsChange() {
+  tabsStore.listeners.forEach(l => l())
+}
+
+function subscribeTabs(listener: () => void) {
+  tabsStore.listeners.add(listener)
+  return () => tabsStore.listeners.delete(listener)
+}
+
+function getTabsSnapshot(): string[] {
+  return tabsStore.tabs
+}
+
+function addTab(name: string) {
+  const trimmed = name.trim()
+  if (!trimmed || tabsStore.tabs.includes(trimmed)) return
+  tabsStore.tabs = [...tabsStore.tabs, trimmed]
+  emitTabsChange()
+}
+
+function removeTab(name: string) {
+  tabsStore.tabs = tabsStore.tabs.filter(t => t !== name)
+  emitTabsChange()
+}
+
+export function useTabs() {
+  const tabs = useSyncExternalStore(subscribeTabs, getTabsSnapshot, getTabsSnapshot)
+  return {
+    tabs,
+    addTab: useCallback(addTab, []),
+    removeTab: useCallback(removeTab, []),
   }
 }
