@@ -101,7 +101,7 @@ function makeCard(
     name,
     code,
     category,
-    imageUrl: `https://picsum.photos/seed/${code}/80/120`,
+    imageUrl: `https://picsum.photos/seed/${code}/400/580`,
     prices,
     isStopped,
     enabledRarities: makeEnabledRarities(prices),

@@ -121,13 +121,24 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
         {/* Left Side - Card Image */}
         <div className="flex w-1/2 items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 p-8">
           <div className="relative aspect-[3/4] w-full max-w-sm overflow-hidden rounded-2xl bg-zinc-800 shadow-xl">
-            <Image
-              src={editMode ? editImageUrl : card.imageUrl}
-              alt={card.name}
-              fill
-              className={`object-cover ${card.isStopped && !editMode ? 'grayscale brightness-50' : ''}`}
-              sizes="(max-width: 768px) 50vw, 35vw"
-            />
+            {editMode ? (
+              // 편집 모드: 일반 img 태그 사용 (next/image 캐시 문제 회피)
+              <img
+                src={editImageUrl || '/placeholder-card.svg'}
+                alt={card.name}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.svg' }}
+              />
+            ) : (
+              <Image
+                src={card.imageUrl || '/placeholder-card.svg'}
+                alt={card.name}
+                fill
+                className={`object-cover ${card.isStopped ? 'grayscale brightness-50' : ''}`}
+                sizes="(max-width: 768px) 50vw, 35vw"
+                onError={() => {}}
+              />
+            )}
             {/* Holographic overlay effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5" />
             
