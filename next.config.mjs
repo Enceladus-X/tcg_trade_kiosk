@@ -5,9 +5,7 @@ const nextConfig = {
   },
   images: {
     remotePatterns: [
-      // picsum - 개발용 placeholder
-      { protocol: 'https', hostname: 'picsum.photos' },
-      // YGOPRODeck - 실제 유희왕 카드 이미지 (https://images.ygoprodeck.com/images/cards/{id}.jpg)
+      // YGOPRODeck - 실제 유희왕 카드 이미지 (나중에 외부 URL 입력 시 사용)
       { protocol: 'https', hostname: 'images.ygoprodeck.com' },
     ],
   },
