@@ -1,5 +1,5 @@
 {
-  "name": "tcg-purchase-pos",
+  "name": "tcg-trade-kiosk",
   "version": "0.1.0",
   "private": true,
   "scripts": {
