@@ -18,12 +18,8 @@ export interface Card {
 // Available categories (expansion sets)
 export const cardCategories = [
   '전체',
+  '블레이징 도미니언',
   '버스트 프로토콜',
-  '레전더리 컬렉션',
-  '다크 리벨리온',
-  '스타라이트 스테이지',
-  '크로스 오버',
-  '프리미엄 팩',
   '기타',
 ] as const
 
@@ -78,54 +74,67 @@ export const rarityColors: Record<string, { bg: string; text: string; border: st
   PSR: { bg: 'bg-sky-900', text: 'text-sky-200', border: 'border-sky-700' },
 }
 
-// Generate mock card data
-const cardNames = [
-  '푸른 눈의 백룡', '어둠의 마술사', '레드 아이즈 블랙 드래곤',
-  '엑조디아', '오실리스의 천공룡', '오벨리스크의 거신병',
-  '라의 익신룡', '블랙 매지션 걸', '쿠리보', '검은 숲의 마녀',
-  '그래비티 바인드', '마법 실린더', '성스러운 방어막', '거울의 힘',
-  '사이버 드래곤', '스타더스트 드래곤', '정크 워리어', '싱크론 워리어',
-  '네오스', '포션 오브 매드니스', '강제 전이', '심판의 번개',
-  '어둠의 계약서', '패왕 흑룡', '팬텀 나이츠', '드래군 오브 레드 아이즈',
-  '액세스코드 토커', '보렐로드 드래곤', '크리스탈윙 싱크로 드래곤',
-  '엘드리치', '드라이트론 메테오니스', '티어라멘츠 키토칼로스',
-  '스프라이트 엘프', '미라제스 오브 나이트메어', '천룡 성배',
-  '증식의 G', '무한포영', '재의 벚꽃', '팬텀 포스',
-  '성창의 용기사', '플런더 패트롤', '신성 글로리아스 라이트',
-]
-
-const generatePrices = (): CardPrice[] => {
-  const rarities: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR']
-  return rarities.map(rarity => ({
-    rarity,
-    price: Math.floor(Math.random() * 50000) * 100 + 100, // 100 ~ 5,000,000원
-  }))
+// Helper: 가격이 있는 레어도만 CardPrice 배열로 변환
+function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPrice[] {
+  return (Object.entries(raw) as [CardPrice['rarity'], number][])
+    .filter(([, price]) => price > 0)
+    .map(([rarity, price]) => ({ rarity, price }))
 }
 
-// Generate cards with some randomly stopped (매입 중지)
-export const mockCards: CardWithStatus[] = Array.from({ length: 200 }, (_, i) => {
-  const isStopped = i % 15 === 0 // Every 15th card is stopped
-  const enabledRarities: Record<string, boolean> = {}
-  const rarities = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR']
-  rarities.forEach(r => {
-    enabledRarities[r] = isStopped ? false : Math.random() > 0.2 // 80% chance enabled if not stopped
-  })
-  
-  // Assign random category (excluding '전체')
-  const categoryOptions = cardCategories.filter(c => c !== '전체')
-  const randomCategory = categoryOptions[i % categoryOptions.length]
-  
+// Helper: 가격 있는 레어도 = enabled, 없는 = disabled
+function makeEnabledRarities(prices: CardPrice[]): Record<string, boolean> {
+  const all: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR']
+  const priced = new Set(prices.map(p => p.rarity))
+  return Object.fromEntries(all.map(r => [r, priced.has(r)]))
+}
+
+function makeCard(
+  code: string,
+  name: string,
+  category: string,
+  raw: Partial<Record<CardPrice['rarity'], number>>,
+): CardWithStatus {
+  const prices = makePrices(raw)
+  const isStopped = prices.length === 0
   return {
-    id: `card-${i + 1}`,
-    name: cardNames[i % cardNames.length],
-    code: `CARD-${String(i + 1).padStart(4, '0')}`,
-    category: randomCategory,
-    imageUrl: `https://picsum.photos/seed/${i + 1}/80/120`,
-    prices: generatePrices(),
+    id: code,
+    name,
+    code,
+    category,
+    imageUrl: `https://picsum.photos/seed/${code}/80/120`,
+    prices,
     isStopped,
-    enabledRarities,
+    enabledRarities: makeEnabledRarities(prices),
   }
-})
+}
+
+// 블레이징 도미니언 (BLZD) - 유희왕_매입스프레드_시트.xlsx 기준
+export const mockCards: CardWithStatus[] = [
+  makeCard('BLZD-KR002', '파워 바이스드래곤',            '블레이징 도미니언', { SR: 700,   SE: 2500              }),
+  makeCard('BLZD-KR014', '엘펜노츠 레기나',              '블레이징 도미니언', { SR: 500,   SE: 2500,  PSR: 30000 }),
+  makeCard('BLZD-KR016', '페어리테일－매치리르',          '블레이징 도미니언', {            SE: 1000,  PSR: 10000 }),
+  makeCard('BLZD-KR018', '헤카톤케일 마키브엘',           '블레이징 도미니언', {            SE: 1000              }),
+  makeCard('BLZD-KR020', '에니아크래프트－AtilE.SPIA',   '블레이징 도미니언', {            SE: 800               }),
+  makeCard('BLZD-KR021', '킬러튠 로터리',                '블레이징 도미니언', { SR: 500,   SE: 4000,  PSR: 25000 }),
+  makeCard('BLZD-KR024', '피드라울리스＝하르모니아',      '블레이징 도미니언', { UL: 30000, SE: 40000, PSR: 80000 }),
+  makeCard('BLZD-KR027', '혈수용희 드라세레아',           '블레이징 도미니언', {            SE: 1500,  PSR: 10000 }),
+  makeCard('BLZD-KR010', '혼절감옥신 비도리움',           '블레이징 도미니언', { R: 1500,              PSR: 12000 }),
+  makeCard('BLZD-KR015', '크라운클랜 플레어',             '블레이징 도미니언', {            SE: 400,   PSR: 4500  }),
+  makeCard('BLZD-KR015B','크라운클랜 화이트페이스',        '블레이징 도미니언', {                                  }),
+  makeCard('BLZD-KR030', '레지나 데몬',                   '블레이징 도미니언', {            SE: 500               }),
+  makeCard('BLZD-KR033', '페어리테일을 엮는 자',          '블레이징 도미니언', {            SE: 1800              }),
+  makeCard('BLZD-KR034', '페어리테일을 이야기하는 자',    '블레이징 도미니언', {            SE: 1000,  PSR: 7000  }),
+  makeCard('BLZD-KR036', '더 크림즌 킹',                  '블레이징 도미니언', { R: 500,    SE: 2000,  PSR: 15000 }),
+  makeCard('BLZD-KR038', '스카레드 하이퍼노바 드래곤',    '블레이징 도미니언', { UL: 700,   SE: 1500,  PSR: 10000 }),
+  makeCard('BLZD-KR042', '킬러튠 B2B',                    '블레이징 도미니언', { R: 800,    SE: 4000,  PSR: 25000 }),
+  makeCard('BLZD-KR043', '초노급포탑열차 구스타프 로켓', '블레이징 도미니언', { R: 500,               PSR: 6000  }),
+  makeCard('BLZD-KR047', '페어리테일－위캣',              '블레이징 도미니언', {            SE: 2000              }),
+  makeCard('BLZD-KR048', '헤루비담 이리스필',             '블레이징 도미니언', {            SE: 1000              }),
+  makeCard('BLZD-KR050', '사화요란의 령사',               '블레이징 도미니언', { UL: 4000,  SE: 7000,  PSR: 4000  }),
+  makeCard('BLZD-KR069', '초일융합',                      '블레이징 도미니언', { R: 1000,              PSR: 9000  }),
+  makeCard('BLZD-KR077', '도미나스 스파크',               '블레이징 도미니언', { UL: 16000, SE: 22000, PSR: 80000 }),
+  makeCard('BLZD-KR079', '신의밀고',                      '블레이징 도미니언', { SR: 3500,  SE: 18000             }),
+]
 
 // Mock pending orders for admin dashboard
 export const mockPendingOrders: PendingOrder[] = [
@@ -137,10 +146,10 @@ export const mockPendingOrders: PendingOrder[] = [
     accountNumber: '3333-01-1234567',
     phoneLast4: '1234',
     items: [
-      { cardId: 'card-1', cardName: '푸른 눈의 백룡', cardCode: 'CARD-0001', rarity: 'UR', price: 150000, quantity: 2 },
-      { cardId: 'card-3', cardName: '레드 아이즈 블랙 드래곤', cardCode: 'CARD-0003', rarity: 'SR', price: 50000, quantity: 1 },
+      { cardId: 'BLZD-KR077', cardName: '도미나스 스파크', cardCode: 'BLZD-KR077', rarity: 'PSR', price: 80000, quantity: 2 },
+      { cardId: 'BLZD-KR024', cardName: '피드라울리스＝하르모니아', cardCode: 'BLZD-KR024', rarity: 'UL', price: 30000, quantity: 1 },
     ],
-    totalPrice: 350000,
+    totalPrice: 190000,
     status: 'pending',
   },
   {
@@ -151,9 +160,9 @@ export const mockPendingOrders: PendingOrder[] = [
     accountNumber: '110-123-456789',
     phoneLast4: '5678',
     items: [
-      { cardId: 'card-5', cardName: '오실리스의 천공룡', cardCode: 'CARD-0005', rarity: 'PSR', price: 500000, quantity: 1 },
+      { cardId: 'BLZD-KR079', cardName: '신의밀고', cardCode: 'BLZD-KR079', rarity: 'SE', price: 18000, quantity: 1 },
     ],
-    totalPrice: 500000,
+    totalPrice: 18000,
     status: 'pending',
   },
   {
@@ -164,9 +173,9 @@ export const mockPendingOrders: PendingOrder[] = [
     accountNumber: '123456-12-123456',
     phoneLast4: '9012',
     items: [
-      { cardId: 'card-10', cardName: '검은 숲의 마녀', cardCode: 'CARD-0010', rarity: 'R', price: 5000, quantity: 5 },
+      { cardId: 'BLZD-KR042', cardName: '킬러튠 B2B', cardCode: 'BLZD-KR042', rarity: 'R', price: 800, quantity: 3 },
     ],
-    totalPrice: 25000,
+    totalPrice: 2400,
     status: 'approved',
   },
 ]
