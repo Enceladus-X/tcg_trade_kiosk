@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, ShoppingCart } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Search, ShoppingCart, X } from 'lucide-react'
 import { FullWidthGrid } from '@/components/full-width-grid'
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { CartListModal } from '@/components/cart-list-modal'
@@ -15,15 +15,18 @@ export default function POSPage() {
   const [cartModalOpen, setCartModalOpen] = useState(false)
   const [globalAdminModalOpen, setGlobalAdminModalOpen] = useState(false)
   const [showGlobalPinOverlay, setShowGlobalPinOverlay] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const { totalQuantity } = useCart()
 
-  const handleCardClick = (card: CardWithStatus) => {
-    setSelectedCard(card)
-  }
-
-  const handleCloseCardModal = () => {
-    setSelectedCard(null)
-  }
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus()
+    } else {
+      setSearchQuery('')
+    }
+  }, [searchOpen])
 
   const handleGlobalAdminClick = () => {
     setShowGlobalPinOverlay(true)
@@ -36,22 +39,23 @@ export default function POSPage() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950">
-      {/* Main Content - Full Width Card Grid */}
+      {/* Main Content */}
       <main className="flex-1 overflow-hidden">
-        <FullWidthGrid 
-          onCardClick={handleCardClick} 
+        <FullWidthGrid
+          onCardClick={setSelectedCard}
           onGlobalAdminClick={handleGlobalAdminClick}
+          searchQuery={searchQuery}
         />
       </main>
 
       {/* Floating Action Buttons - Bottom Right */}
       <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-3">
-        {/* Quick Add Button (opens admin) */}
+        {/* Search Button */}
         <button
-          onClick={handleGlobalAdminClick}
+          onClick={() => setSearchOpen(true)}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 shadow-lg transition-all hover:bg-zinc-700 hover:text-white active:scale-95"
         >
-          <Plus className="h-6 w-6" />
+          <Search className="h-6 w-6" />
         </button>
 
         {/* Cart Button with Badge */}
@@ -68,15 +72,49 @@ export default function POSPage() {
         </button>
       </div>
 
-      {/* 70% Card Detail Modal */}
+      {/* Search Overlay */}
+      {searchOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSearchOpen(false)}
+          />
+          <div className="fixed left-1/2 top-20 z-50 w-full max-w-xl -translate-x-1/2 px-4">
+            <div className="flex items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3 shadow-2xl">
+              <Search className="h-5 w-5 shrink-0 text-zinc-500" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="카드 검색..."
+                className="flex-1 bg-transparent text-lg text-white placeholder:text-zinc-600 focus:outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-white">
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+              <button
+                onClick={() => setSearchOpen(false)}
+                className="shrink-0 rounded-lg px-3 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Card Detail Modal */}
       {selectedCard && (
         <CardDetailModal
           card={selectedCard}
-          onClose={handleCloseCardModal}
+          onClose={() => setSelectedCard(null)}
         />
       )}
 
-      {/* Cart/Purchase List Modal with Checkout */}
+      {/* Cart Modal */}
       {cartModalOpen && (
         <CartListModal onClose={() => setCartModalOpen(false)} />
       )}

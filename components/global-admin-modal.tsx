@@ -19,13 +19,13 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
 }
 
 const defaultPrices = {
-  N:   { enabled: false, price: 100 },
-  R:   { enabled: false, price: 500 },
-  SR:  { enabled: false, price: 2000 },
-  UR:  { enabled: false, price: 10000 },
-  UL:  { enabled: false, price: 50000 },
-  SE:  { enabled: false, price: 30000 },
-  PSR: { enabled: false, price: 100000 },
+  N:   { enabled: false, price: 0 },
+  R:   { enabled: false, price: 0 },
+  SR:  { enabled: false, price: 0 },
+  UR:  { enabled: false, price: 0 },
+  UL:  { enabled: false, price: 0 },
+  SE:  { enabled: false, price: 0 },
+  PSR: { enabled: false, price: 0 },
 }
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
@@ -278,7 +278,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           </span>
                           <input
                             type="number"
-                            value={price}
+                            value={price === 0 ? '' : price}
                             onChange={(e) =>
                               setNewCardPrices(prev => ({ ...prev, [rarity]: { ...prev[rarity], price: parseInt(e.target.value) || 0 } }))
                             }
