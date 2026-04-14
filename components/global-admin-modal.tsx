@@ -49,9 +49,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
     const prices = ALL_RARITIES
-      .filter(r => newCardEnabled[r])
-      .map(r => ({ rarity: r as RarityKey, price: newCardPrices[r] || 0 }))
-    const enabledRarities = { ...newCardEnabled }
+      .filter(r => newCardEnabled[r] && (newCardPrices[r] || 0) > 0)
+      .map(r => ({ rarity: r as RarityKey, price: newCardPrices[r] }))
+    const enabledRarities = Object.fromEntries(
+      ALL_RARITIES.map(r => [r, newCardEnabled[r] && (newCardPrices[r] || 0) > 0])
+    )
 
     addCard({
       name: newCardName.trim(),

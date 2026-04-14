@@ -67,14 +67,18 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
   }, [])
 
   const handleSaveEdit = useCallback(() => {
+    // 활성화 + 가격 > 0 인 레어도만 유효
     const newPrices = ALL_RARITIES
-      .filter(r => editEnabledRarities[r])
-      .map(r => ({ rarity: r as RarityKey, price: editPrices[r] || 0 }))
+      .filter(r => editEnabledRarities[r] && (editPrices[r] || 0) > 0)
+      .map(r => ({ rarity: r as RarityKey, price: editPrices[r] }))
+    const newEnabledRarities = Object.fromEntries(
+      ALL_RARITIES.map(r => [r, editEnabledRarities[r] && (editPrices[r] || 0) > 0])
+    )
 
     updateCard(card.id, {
       name: editName,
       imageUrl: editImageUrl,
-      enabledRarities: { ...editEnabledRarities },
+      enabledRarities: newEnabledRarities,
       prices: newPrices as CardPrice[],
       isStopped: newPrices.length === 0,
     })
