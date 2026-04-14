@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, screen } = require('electron')
 const serve = require('electron-serve')
 const path = require('path')
 const fs = require('fs')
@@ -28,10 +28,15 @@ function loadConfig() {
 }
 
 function createWindow() {
+  const { workArea } = screen.getPrimaryDisplay()
+
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    frame: false,          // 타이틀바 없는 테두리 없는 창
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width,
+    height: workArea.height,
+    frame: false,
+    resizable: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -40,9 +45,7 @@ function createWindow() {
     },
   })
 
-  if (isProd) {
-    win.maximize()         // 작업 표시줄 유지한 채 최대화
-  } else {
+  if (!isProd) {
     win.webContents.openDevTools({ mode: 'detach' })
   }
 

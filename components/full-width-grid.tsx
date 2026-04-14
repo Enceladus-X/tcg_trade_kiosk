@@ -34,6 +34,16 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
 
   return (
     <div className="flex h-full flex-col">
+      {/* 매장 타이틀 배너 */}
+      <div className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-6 py-2">
+        <div className="flex items-baseline gap-3">
+          <span className="text-xl font-extrabold tracking-tight text-amber-400">
+            마린포드 싱글카드 매매표
+          </span>
+          <span className="text-xs text-zinc-600">카드를 선택하면 매입가를 확인할 수 있습니다</span>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2">
