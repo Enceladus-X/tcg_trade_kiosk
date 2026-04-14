@@ -31,7 +31,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    fullscreen: isProd,
+    frame: false,          // 타이틀바 없는 테두리 없는 창
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -40,7 +40,9 @@ function createWindow() {
     },
   })
 
-  if (!isProd) {
+  if (isProd) {
+    win.maximize()         // 작업 표시줄 유지한 채 최대화
+  } else {
     win.webContents.openDevTools({ mode: 'detach' })
   }
 
