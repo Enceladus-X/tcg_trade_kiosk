@@ -129,48 +129,7 @@ export const mockCards: CardWithStatus[] = [
   makeCard('BLZD-KR079', '신의밀고',                      '블레이징 도미니언', { SR: 3500,  SE: 18000             }),
 ]
 
-export const mockPendingOrders: PendingOrder[] = [
-  {
-    id: 'order-001',
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    customerName: '김철수',
-    bankName: '카카오뱅크',
-    accountNumber: '3333-01-1234567',
-    phoneLast4: '1234',
-    items: [
-      { cardId: 'BLZD-KR077', cardName: '도미나스 스파크', cardCode: 'BLZD-KR077', rarity: 'PSR', price: 80000, quantity: 2 },
-      { cardId: 'BLZD-KR024', cardName: '피드라울리스＝하르모니아', cardCode: 'BLZD-KR024', rarity: 'UL', price: 30000, quantity: 1 },
-    ],
-    totalPrice: 190000,
-    status: 'pending',
-  },
-  {
-    id: 'order-002',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    customerName: '박영희',
-    bankName: '신한은행',
-    accountNumber: '110-123-456789',
-    phoneLast4: '5678',
-    items: [
-      { cardId: 'BLZD-KR079', cardName: '신의밀고', cardCode: 'BLZD-KR079', rarity: 'SE', price: 18000, quantity: 1 },
-    ],
-    totalPrice: 18000,
-    status: 'pending',
-  },
-  {
-    id: 'order-003',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    customerName: '이민준',
-    bankName: '국민은행',
-    accountNumber: '123456-12-123456',
-    phoneLast4: '9012',
-    items: [
-      { cardId: 'BLZD-KR042', cardName: '킬러튠 B2B', cardCode: 'BLZD-KR042', rarity: 'UR', price: 800, quantity: 3 },
-    ],
-    totalPrice: 2400,
-    status: 'approved',
-  },
-]
+export const mockPendingOrders: PendingOrder[] = []
 
 export function searchCards(cards: CardWithStatus[], query: string): CardWithStatus[] {
   if (!query.trim()) return cards
