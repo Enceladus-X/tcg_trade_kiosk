@@ -1,23 +1,30 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Settings } from 'lucide-react'
+import { Settings, Search, X } from 'lucide-react'
 import { searchCards, type CardWithStatus } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 
 interface FullWidthGridProps {
   onCardClick: (card: CardWithStatus) => void
   onGlobalAdminClick: () => void
-  searchQuery: string
 }
 
-export function FullWidthGrid({ onCardClick, onGlobalAdminClick, searchQuery }: FullWidthGridProps) {
+export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGridProps) {
   const { cards } = useCards()
   const { tabs } = useTabs()
   const [selectedTab, setSelectedTab] = useState<string>(() => tabs[0] ?? '')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const activeTab = tabs.includes(selectedTab) ? selectedTab : (tabs[0] ?? '')
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus()
+    else setSearchQuery('')
+  }, [searchOpen])
 
   const filteredCards = useMemo(() => {
     const byTab = cards.filter(c => c.category === activeTab)
@@ -28,26 +35,60 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick, searchQuery }: 
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
-        {/* Top row: tab bar + settings */}
         <div className="flex items-center gap-2">
-          <div
-            className="flex flex-1 gap-1 overflow-x-auto"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+          {searchOpen ? (
+            /* 검색 모드 */
+            <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
+              <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="카드 검색..."
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            /* 탭 모드 */
+            <div
+              className="flex flex-1 gap-1 overflow-x-auto"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+            >
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setSelectedTab(tab)}
+                  className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === tab
+                      ? 'bg-amber-500 text-black'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 검색 토글 */}
+          <button
+            onClick={() => setSearchOpen(v => !v)}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
+              searchOpen
+                ? 'border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+            }`}
           >
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setSelectedTab(tab)}
-                className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                  activeTab === tab
-                    ? 'bg-amber-500 text-black'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+            {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+          </button>
+
+          {/* 관리자 설정 */}
           <button
             onClick={onGlobalAdminClick}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
@@ -92,7 +133,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick, searchQuery }: 
         {filteredCards.length === 0 && (
           <div className="flex h-64 items-center justify-center">
             <p className="text-zinc-500">
-              {tabs.length === 0 ? '탭을 먼저 생성하세요' : '카드가 없습니다'}
+              {searchQuery ? `"${searchQuery}" 검색 결과 없음` : tabs.length === 0 ? '탭을 먼저 생성하세요' : '카드가 없습니다'}
             </p>
           </div>
         )}
