@@ -73,6 +73,11 @@ function addCard(card: Omit<CardWithStatus, 'id'>) {
   emitCardsChange()
 }
 
+function deleteCard(cardId: string) {
+  cardsStore.cards = cardsStore.cards.filter(c => c.id !== cardId)
+  emitCardsChange()
+}
+
 function setCardStopped(cardId: string, stopped: boolean) {
   const card = cardsStore.cards.find(c => c.id === cardId)
   if (!card) return
@@ -95,6 +100,7 @@ export function useCards() {
     toggleRarity: useCallback(toggleRarity, []),
     updateRarityPrice: useCallback(updateRarityPrice, []),
     addCard: useCallback(addCard, []),
+    deleteCard: useCallback(deleteCard, []),
     setCardStopped: useCallback(setCardStopped, []),
   }
 }

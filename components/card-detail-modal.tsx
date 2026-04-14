@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
-import { Settings, Minus, Plus, Check, X, Save } from 'lucide-react'
+import { Settings, Minus, Plus, Check, X, Save, Trash2 } from 'lucide-react'
 import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
@@ -34,8 +34,10 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
     return base
   })
 
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
   const { addItem } = useCart()
-  const { updateCard } = useCards()
+  const { updateCard, deleteCard } = useCards()
 
   // Filter to only show enabled rarities for purchase
   const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity] && p.price > 0)
@@ -161,20 +163,47 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
               <div className="flex items-center justify-between border-b border-zinc-800 px-8 py-4">
                 <h2 className="text-xl font-bold text-white">카드 정보 수정</h2>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleCancelEdit}
-                    className="flex h-10 items-center gap-2 rounded-lg border border-zinc-700 px-4 text-zinc-400 hover:bg-zinc-800"
-                  >
-                    <X className="h-4 w-4" />
-                    취소
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-white hover:bg-emerald-500"
-                  >
-                    <Save className="h-4 w-4" />
-                    저장
-                  </button>
+                  {confirmDelete ? (
+                    <>
+                      <span className="flex items-center text-sm text-zinc-400">정말 삭제할까요?</span>
+                      <button
+                        onClick={() => { deleteCard(card.id); onClose() }}
+                        className="flex h-10 items-center gap-2 rounded-lg bg-red-600 px-4 text-white hover:bg-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        삭제
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        className="flex h-10 items-center gap-2 rounded-lg border border-zinc-700 px-4 text-zinc-400 hover:bg-zinc-800"
+                      >
+                        취소
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className="flex h-10 items-center gap-2 rounded-lg border border-red-900 px-4 text-red-400 hover:bg-red-900/30"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="flex h-10 items-center gap-2 rounded-lg border border-zinc-700 px-4 text-zinc-400 hover:bg-zinc-800"
+                      >
+                        <X className="h-4 w-4" />
+                        취소
+                      </button>
+                      <button
+                        onClick={handleSaveEdit}
+                        className="flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-white hover:bg-emerald-500"
+                      >
+                        <Save className="h-4 w-4" />
+                        저장
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               
