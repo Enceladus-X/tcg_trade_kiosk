@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Settings, Search, X } from 'lucide-react'
+import { Settings, Search, X, Power } from 'lucide-react'
 import { searchCards, type CardWithStatus } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 
@@ -20,6 +20,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const activeTab = tabs.includes(selectedTab) ? selectedTab : (tabs[0] ?? '')
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus()
@@ -95,6 +96,17 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
           >
             <Settings className="h-5 w-5" />
           </button>
+
+          {/* 앱 종료 - Electron 환경에서만 표시 */}
+          {isElectron && (
+            <button
+              onClick={() => window.close()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
+              title="프로그램 종료"
+            >
+              <Power className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </div>
 
