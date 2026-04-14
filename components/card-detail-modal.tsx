@@ -38,7 +38,7 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
   const { updateCard } = useCards()
 
   // Filter to only show enabled rarities for purchase
-  const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity])
+  const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity] && p.price > 0)
   const selectedPrice = card.prices.find(p => p.rarity === selectedRarity)?.price || 0
   const totalPrice = selectedPrice * quantity
 

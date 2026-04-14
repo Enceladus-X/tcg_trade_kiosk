@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Delete, Lock } from 'lucide-react'
 
 interface PinAuthOverlayProps {
@@ -43,6 +43,16 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
     setPin('')
     setError(false)
   }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') handleNumberClick(e.key)
+      else if (e.key === 'Backspace') handleDelete()
+      else if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleNumberClick, handleDelete, onCancel])
 
   return (
     <div 
