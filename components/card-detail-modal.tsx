@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
 import { Settings, Minus, Plus, Check, X, Save } from 'lucide-react'
-import { type CardWithStatus, type CardPrice, formatPrice } from '@/lib/mock-cards'
+import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
 import { PinAuthOverlay } from './pin-auth-overlay'
