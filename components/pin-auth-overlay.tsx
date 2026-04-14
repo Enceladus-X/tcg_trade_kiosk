@@ -14,22 +14,29 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
 
-  const handleNumberClick = useCallback((num: string) => {
-    if (pin.length < 4) {
-      const newPin = pin + num
-      setPin(newPin)
-      setError(false)
+  const handleNumberClick = useCallback(async (num: string) => {
+    if (pin.length >= 4) return
+    const newPin = pin + num
+    setPin(newPin)
+    setError(false)
 
-      if (newPin.length === 4) {
-        if (newPin === CORRECT_PIN) {
-          onSuccess()
-        } else {
-          setError(true)
-          setTimeout(() => {
-            setPin('')
-            setError(false)
-          }, 500)
-        }
+    if (newPin.length === 4) {
+      let correct = false
+      const api = (window as any).electronAPI
+      if (api?.verifyPin) {
+        correct = await api.verifyPin(newPin)
+      } else {
+        correct = newPin === CORRECT_PIN
+      }
+
+      if (correct) {
+        onSuccess()
+      } else {
+        setError(true)
+        setTimeout(() => {
+          setPin('')
+          setError(false)
+        }, 500)
       }
     }
   }, [pin, onSuccess])
