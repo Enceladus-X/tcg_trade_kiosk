@@ -3,6 +3,24 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { type CardWithStatus, type CardPrice, mockCards } from './mock-cards'
 
+const CARDS_KEY = 'tcg_kiosk_cards'
+const TABS_KEY  = 'tcg_kiosk_tabs'
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveToStorage(key: string, value: unknown) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+}
+
 // --- Cards Store ---
 type CardsStore = {
   cards: CardWithStatus[]
@@ -10,11 +28,12 @@ type CardsStore = {
 }
 
 const cardsStore: CardsStore = {
-  cards: [...mockCards],
+  cards: loadFromStorage<CardWithStatus[]>(CARDS_KEY, [...mockCards]),
   listeners: new Set(),
 }
 
 function emitCardsChange() {
+  saveToStorage(CARDS_KEY, cardsStore.cards)
   cardsStore.listeners.forEach(l => l())
 }
 
@@ -112,11 +131,12 @@ type TabsStore = {
 }
 
 const tabsStore: TabsStore = {
-  tabs: ['블레이징 도미니언', '버스트 프로토콜'],
+  tabs: loadFromStorage<string[]>(TABS_KEY, ['블레이징 도미니언', '버스트 프로토콜']),
   listeners: new Set(),
 }
 
 function emitTabsChange() {
+  saveToStorage(TABS_KEY, tabsStore.tabs)
   tabsStore.listeners.forEach(l => l())
 }
 
