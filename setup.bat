@@ -1,19 +1,18 @@
 @echo off
-chcp 65001 >nul
-title TCG 매입 키오스크 - 설치 및 빌드
+title TCG kiosk - Setup
 
 echo.
 echo  ====================================================
-echo   TCG 매입 키오스크 - 환경 설정 및 빌드 스크립트
+echo   TCG kiosk - Setup and Build Script
 echo  ====================================================
 echo.
 
-REM ── 1. Node.js 확인 ──────────────────────────────────
+REM 1. Node.js check
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [오류] Node.js 가 설치되어 있지 않습니다.
+    echo [ERROR] Node.js is not installed.
     echo.
-    echo  아래 주소에서 Node.js 18 이상을 설치해 주세요:
+    echo  Install Node.js 18 or later from:
     echo  https://nodejs.org
     echo.
     pause
@@ -23,18 +22,18 @@ if %errorlevel% neq 0 (
 for /f "tokens=*" %%v in ('node --version') do set NODE_VER=%%v
 echo [OK] Node.js %NODE_VER%
 
-REM ── 2. pnpm 확인 / 활성화 ────────────────────────────
+REM 2. pnpm check
 where pnpm >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [..] pnpm 이 없습니다. corepack 으로 활성화 시도...
+    echo [..] pnpm not found, enabling via corepack...
     corepack enable pnpm >nul 2>&1
     where pnpm >nul 2>&1
     if %errorlevel% neq 0 (
-        echo [..] corepack 실패. npm 전역 설치 시도...
+        echo [..] corepack failed, trying npm global install...
         npm install -g pnpm
         where pnpm >nul 2>&1
         if %errorlevel% neq 0 (
-            echo [오류] pnpm 설치에 실패했습니다. 수동으로 설치해 주세요:
+            echo [ERROR] pnpm install failed. Run manually:
             echo  npm install -g pnpm
             pause
             exit /b 1
@@ -45,41 +44,42 @@ if %errorlevel% neq 0 (
 for /f "tokens=*" %%v in ('pnpm --version') do set PNPM_VER=%%v
 echo [OK] pnpm %PNPM_VER%
 
-REM ── 3. 의존성 설치 ───────────────────────────────────
+REM 3. Install dependencies
 echo.
-echo [..] 의존성 설치 중... (첫 실행 시 수 분 소요)
+echo [..] Installing dependencies... (first run may take several minutes)
 pnpm install
 if %errorlevel% neq 0 (
     echo.
-    echo [오류] 의존성 설치에 실패했습니다.
+    echo [ERROR] Dependency install failed.
     echo.
-    echo  네트워크 문제라면 아래를 시도해 보세요:
+    echo  If this is a network/Electron download error, try:
     echo   set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
     echo   pnpm install
     echo.
     pause
     exit /b 1
 )
-echo [OK] 의존성 설치 완료
+echo [OK] Dependencies installed
 
-REM ── 4. Next.js 빌드 ──────────────────────────────────
+REM 4. Next.js build
 echo.
-echo [..] Next.js 빌드 중...
+echo [..] Building Next.js...
 pnpm build
 if %errorlevel% neq 0 (
-    echo [오류] Next.js 빌드 실패
+    echo [ERROR] Next.js build failed
     pause
     exit /b 1
 )
-echo [OK] Next.js 빌드 완료
+echo [OK] Next.js build complete
 
-REM ── 5. Electron 패키징 ───────────────────────────────
+REM 5. Electron packaging
 echo.
-echo [..] exe 패키징 중... (Electron 다운로드 포함, 수 분 소요)
+echo [..] Packaging exe... (downloads Electron, may take several minutes)
 pnpm exec electron-builder
 if %errorlevel% neq 0 (
     echo.
-    echo [오류] 패키징 실패. Electron 다운로드 오류라면:
+    echo [ERROR] Packaging failed.
+    echo  If Electron download timed out, try:
     echo   set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
     echo   pnpm exec electron-builder
     echo.
@@ -87,20 +87,23 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM ── 6. exe 복사 ──────────────────────────────────────
+REM 6. Copy all exe files from dist to project root
 echo.
-echo [..] exe 파일 복사 중...
-if exist "dist\TCG 매입 키오스크 0.1.0.exe" (
-    copy /y "dist\TCG 매입 키오스크 0.1.0.exe" "TCG 매입 키오스크.exe" >nul
-    echo [OK] TCG 매입 키오스크.exe 생성 완료
-) else (
-    echo [경고] dist 폴더에서 exe 를 찾지 못했습니다. dist\ 폴더를 확인하세요.
+echo [..] Copying exe...
+set COPIED=0
+for %%f in ("dist\*.exe") do (
+    copy /y "%%f" . >nul
+    echo [OK] Copied: %%~nxf
+    set COPIED=1
+)
+if %COPIED%==0 (
+    echo [WARN] No exe found in dist\ folder. Check dist\ manually.
 )
 
 echo.
 echo  ====================================================
-echo   빌드 완료!
-echo   TCG 매입 키오스크.exe 를 실행하세요.
+echo   Build complete! Run the .exe file in this folder.
 echo  ====================================================
 echo.
 pause
+
