@@ -10,6 +10,14 @@
 
 ---
 
+## 다운로드
+
+**[Releases 페이지](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 최신 `.exe` 파일을 받으세요.
+
+별도 설치 없이 더블클릭으로 바로 실행됩니다.
+
+---
+
 ## 프로젝트 소개
 
 TCG(트레이딩 카드 게임) 카드 매장용 **매입 키오스크 데스크탑 앱**입니다.
@@ -84,83 +92,19 @@ TCG(트레이딩 카드 게임) 카드 매장용 **매입 키오스크 데스크
 
 ---
 
-## 시작하기
+## 설치 및 실행
 
----
+### 일반 사용자
 
-### 새 환경에 설치하기 (납품 / 빌드용 PC)
-
-> **최종 사용자 PC (매장 키오스크)에는 별도 설치가 필요 없습니다.**  
-> 아래 과정은 `.exe`를 직접 빌드해야 하는 개발자/납품자용입니다.
-
-#### Step 1 — Node.js 설치
-
-1. https://nodejs.org 에 접속
-2. **LTS** 버전 다운로드 (v20 이상 권장)
-3. 설치 파일 실행 → 기본값으로 설치 완료
-
-설치 확인:
-```
-node --version   # v20.x.x 이상이면 OK
-```
-
-#### Step 2 — setup.bat 실행
-
-프로젝트 폴더에서 `setup.bat`을 더블클릭합니다.
-
-```
-1. pnpm 자동 설치 (corepack 또는 npm 경유)
-2. 의존성 설치 (pnpm install)
-3. Next.js 정적 빌드 (pnpm build)
-4. Electron 패키징 (electron-builder)
-5. 루트 폴더에 .exe 복사
-```
-
-완료 후 같은 폴더의 `.exe` 파일을 실행하면 바로 동작합니다.
-
-> **네트워크 오류 시** (Electron 바이너리 다운로드 실패):  
-> 명령 프롬프트에서 아래를 먼저 실행 후 `setup.bat` 재실행  
-> ```
-> set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-> ```
-
----
-
-### 개발 환경
-
-#### 요구사항
-
-- Node.js 18+
-- pnpm (`npm install -g pnpm` 또는 `corepack enable pnpm`)
-
-#### 설치
-
-```bash
-pnpm install
-```
-
-#### 개발 서버
-
-```bash
-pnpm dev
-# http://localhost:3000 에서 브라우저로 확인
-```
-
-#### Windows exe 빌드
-
-```bash
-pnpm electron:build
-# dist/TCG 매입 키오스크 0.1.0.exe 생성
-```
-
-> 빌드 결과물은 `dist/` 폴더에 생성됩니다.  
-> 포터블 exe이므로 배포 시 단일 파일만 전달하면 됩니다.
+1. **[Releases](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 `.exe` 다운로드
+2. 원하는 폴더에 복사
+3. exe 더블클릭 → 실행 완료
 
 ---
 
 ## 설정 파일
 
-exe와 **같은 폴더**에 `config.json`을 두면 관리자 설정을 변경할 수 있습니다.  
+exe와 **같은 폴더**에 `config.json`을 두면 관리자 PIN을 변경할 수 있습니다.  
 파일이 없으면 앱 최초 실행 시 기본값으로 자동 생성됩니다.
 
 ```json
@@ -172,9 +116,6 @@ exe와 **같은 폴더**에 `config.json`을 두면 관리자 설정을 변경�
 | 필드 | 설명 | 기본값 |
 |------|------|--------|
 | `adminPin` | 관리자 PIN (4자리 숫자 권장) | `"1234"` |
-
-> **개발 환경**: 프로젝트 루트의 `config.json`을 읽습니다.  
-> **프로덕션**: exe 파일과 같은 폴더의 `config.json`을 읽습니다.
 
 ---
 
@@ -204,7 +145,11 @@ tcg_trade_kiosk/
 │   └── use-orders.ts             # 매입 요청 스토어
 ├── public/
 │   └── cards/                    # 카드 이미지 (BLZD-KR*.png)
+├── build/
+│   ├── create-icon.py            # 아이콘 생성 스크립트
+│   └── icon.ico                  # 앱 아이콘
 ├── config.json                   # 관리자 설정 (gitignore, 자동 생성)
+├── setup.bat                     # 개발 환경 빌드 자동화
 ├── next.config.mjs               # Next.js 설정 (output: export)
 └── package.json                  # 의존성 + electron-builder 설정
 ```
@@ -217,22 +162,13 @@ tcg_trade_kiosk/
 2. PIN 4자리 입력 (숫자패드 또는 키보드)
 3. 기본 PIN: **`1234`**
 
-PIN 변경:
-
-```json
-// config.json
-{
-  "adminPin": "5678"
-}
-```
-
-앱 재시작 후 적용됩니다.
+PIN 변경 → `config.json`의 `adminPin` 수정 후 앱 재시작
 
 ---
 
-## 배포
+## 개발자용 빌드
 
-1. `pnpm electron:build` 실행
-2. `dist/TCG 매입 키오스크 0.1.0.exe` 를 대상 PC에 복사
-3. exe와 같은 폴더에 `config.json` 배치 (없으면 자동 생성)
-4. exe 더블클릭으로 실행 — 추가 설치 불필요
+> 소스에서 직접 빌드할 경우에만 필요합니다.
+
+1. [Node.js LTS](https://nodejs.org) 설치
+2. `setup.bat` 더블클릭 (pnpm 설치 → 빌드 → exe 생성 자동화)
