@@ -99,17 +99,13 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": ["x64"]
         }
       ]
     },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["ko_KR"],
-      "language": "1042"
+    "portable": {
+      "splashImage": null
     }
   }
 }
