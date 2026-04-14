@@ -86,25 +86,67 @@ TCG(트레이딩 카드 게임) 카드 매장용 **매입 키오스크 데스크
 
 ## 시작하기
 
-### 요구사항
+---
+
+### 새 환경에 설치하기 (납품 / 빌드용 PC)
+
+> **최종 사용자 PC (매장 키오스크)에는 별도 설치가 필요 없습니다.**  
+> 아래 과정은 `.exe`를 직접 빌드해야 하는 개발자/납품자용입니다.
+
+#### Step 1 — Node.js 설치
+
+1. https://nodejs.org 에 접속
+2. **LTS** 버전 다운로드 (v20 이상 권장)
+3. 설치 파일 실행 → 기본값으로 설치 완료
+
+설치 확인:
+```
+node --version   # v20.x.x 이상이면 OK
+```
+
+#### Step 2 — setup.bat 실행
+
+프로젝트 폴더에서 `setup.bat`을 더블클릭합니다.
+
+```
+1. pnpm 자동 설치 (corepack 또는 npm 경유)
+2. 의존성 설치 (pnpm install)
+3. Next.js 정적 빌드 (pnpm build)
+4. Electron 패키징 (electron-builder)
+5. 루트 폴더에 .exe 복사
+```
+
+완료 후 같은 폴더의 `.exe` 파일을 실행하면 바로 동작합니다.
+
+> **네트워크 오류 시** (Electron 바이너리 다운로드 실패):  
+> 명령 프롬프트에서 아래를 먼저 실행 후 `setup.bat` 재실행  
+> ```
+> set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+> ```
+
+---
+
+### 개발 환경
+
+#### 요구사항
 
 - Node.js 18+
 - pnpm (`npm install -g pnpm` 또는 `corepack enable pnpm`)
 
-### 설치
+#### 설치
 
 ```bash
 pnpm install
 ```
 
-### 개발 서버
+#### 개발 서버
 
 ```bash
 pnpm dev
 # http://localhost:3000 에서 브라우저로 확인
 ```
 
-### Windows exe 빌드
+#### Windows exe 빌드
 
 ```bash
 pnpm electron:build
