@@ -3,11 +3,11 @@
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
 import { Settings, Minus, Plus, Check, X, Save } from 'lucide-react'
-import { type CardWithStatus, rarityColors, formatPrice } from '@/lib/mock-cards'
+import { type CardWithStatus, type CardPrice, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
 import { PinAuthOverlay } from './pin-auth-overlay'
-import { Switch } from '@/components/ui/switch'
+import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 
 interface CardDetailModalProps {
   card: CardWithStatus
@@ -21,16 +21,21 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
   const [added, setAdded] = useState(false)
   const [editMode, setEditMode] = useState(false)
   
-  // Edit mode state
+  // Edit mode state - 모든 레어도 포함
   const [editName, setEditName] = useState(card.name)
   const [editImageUrl, setEditImageUrl] = useState(card.imageUrl)
-  const [editEnabledRarities, setEditEnabledRarities] = useState(card.enabledRarities)
-  const [editPrices, setEditPrices] = useState<Record<string, number>>(
-    Object.fromEntries(card.prices.map(p => [p.rarity, p.price]))
-  )
-  
+  const [editEnabledRarities, setEditEnabledRarities] = useState<Record<string, boolean>>(() => {
+    const base = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
+    return { ...base, ...card.enabledRarities }
+  })
+  const [editPrices, setEditPrices] = useState<Record<string, number>>(() => {
+    const base = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+    card.prices.forEach(p => { base[p.rarity] = p.price })
+    return base
+  })
+
   const { addItem } = useCart()
-  const { updateCard, updateCardName, updateCardImage, toggleRarity, updateRarityPrice } = useCards()
+  const { updateCard } = useCards()
 
   // Filter to only show enabled rarities for purchase
   const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity])
@@ -62,40 +67,30 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
   }, [])
 
   const handleSaveEdit = useCallback(() => {
-    // Update card name
-    if (editName !== card.name) {
-      updateCardName(card.id, editName)
-    }
-    
-    // Update card image
-    if (editImageUrl !== card.imageUrl) {
-      updateCardImage(card.id, editImageUrl)
-    }
-    
-    // Update enabled rarities and prices
-    Object.keys(editEnabledRarities).forEach(rarity => {
-      if (editEnabledRarities[rarity] !== card.enabledRarities[rarity]) {
-        toggleRarity(card.id, rarity, editEnabledRarities[rarity])
-      }
+    const newPrices = ALL_RARITIES
+      .filter(r => editEnabledRarities[r])
+      .map(r => ({ rarity: r as RarityKey, price: editPrices[r] || 0 }))
+
+    updateCard(card.id, {
+      name: editName,
+      imageUrl: editImageUrl,
+      enabledRarities: { ...editEnabledRarities },
+      prices: newPrices as CardPrice[],
+      isStopped: newPrices.length === 0,
     })
-    
-    Object.keys(editPrices).forEach(rarity => {
-      const originalPrice = card.prices.find(p => p.rarity === rarity)?.price
-      if (editPrices[rarity] !== originalPrice) {
-        updateRarityPrice(card.id, rarity, editPrices[rarity])
-      }
-    })
-    
     setEditMode(false)
     onClose()
-  }, [card, editName, editImageUrl, editEnabledRarities, editPrices, updateCardName, updateCardImage, toggleRarity, updateRarityPrice, onClose])
+  }, [card.id, editName, editImageUrl, editEnabledRarities, editPrices, updateCard, onClose])
 
   const handleCancelEdit = useCallback(() => {
     setEditMode(false)
     setEditName(card.name)
     setEditImageUrl(card.imageUrl)
-    setEditEnabledRarities(card.enabledRarities)
-    setEditPrices(Object.fromEntries(card.prices.map(p => [p.rarity, p.price])))
+    const baseEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
+    setEditEnabledRarities({ ...baseEnabled, ...card.enabledRarities })
+    const basePrices = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+    card.prices.forEach(p => { basePrices[p.rarity] = p.price })
+    setEditPrices(basePrices)
   }, [card])
 
   return (
@@ -204,43 +199,19 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
                     />
                   </div>
                   
-                  {/* Rarity Prices with Toggles */}
+                  {/* Rarity Prices */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-zinc-400">레어도별 매입가</label>
-                    <div className="space-y-3">
-                      {card.prices.map(({ rarity }) => {
-                        const colors = rarityColors[rarity]
-                        const isEnabled = editEnabledRarities[rarity]
-                        return (
-                          <div
-                            key={rarity}
-                            className={`flex items-center gap-4 rounded-xl border p-3 transition-colors ${
-                              isEnabled ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-800 bg-zinc-900/50'
-                            }`}
-                          >
-                            <Switch
-                              checked={isEnabled}
-                              onCheckedChange={(checked) =>
-                                setEditEnabledRarities(prev => ({ ...prev, [rarity]: checked }))
-                              }
-                            />
-                            <span className={`w-12 rounded px-2 py-1 text-center text-sm font-bold ${colors.bg} ${colors.text}`}>
-                              {rarity}
-                            </span>
-                            <input
-                              type="number"
-                              value={editPrices[rarity]}
-                              onChange={(e) =>
-                                setEditPrices(prev => ({ ...prev, [rarity]: parseInt(e.target.value) || 0 }))
-                              }
-                              disabled={!isEnabled}
-                              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-right text-white disabled:opacity-50"
-                            />
-                            <span className="text-sm text-zinc-500">원</span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <RarityPicker
+                      enabledRarities={editEnabledRarities}
+                      prices={editPrices}
+                      onToggle={(rarity, enabled) =>
+                        setEditEnabledRarities(prev => ({ ...prev, [rarity]: enabled }))
+                      }
+                      onPriceChange={(rarity, price) =>
+                        setEditPrices(prev => ({ ...prev, [rarity]: price }))
+                      }
+                    />
                   </div>
                 </div>
               </div>

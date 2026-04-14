@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { formatPrice, rarityColors, type OrderStatus } from '@/lib/mock-cards'
-import { Switch } from '@/components/ui/switch'
+import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 
 interface GlobalAdminModalProps {
   onClose: () => void
@@ -18,64 +18,78 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
   rejected: { label: '거절됨',   color: 'bg-red-500/20 text-red-400',         icon: <X className="h-4 w-4" /> },
 }
 
-const defaultPrices = {
-  N:   { enabled: false, price: 0 },
-  R:   { enabled: false, price: 0 },
-  SR:  { enabled: false, price: 0 },
-  UR:  { enabled: false, price: 0 },
-  UL:  { enabled: false, price: 0 },
-  SE:  { enabled: false, price: 0 },
-  PSR: { enabled: false, price: 0 },
-}
+const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
+const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+
+type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
-  const { addCard } = useCards()
-  const { tabs } = useTabs()
-  const [activeTab, setActiveTab] = useState<'orders' | 'add-card'>('orders')
+  const { cards, addCard, setCardStopped } = useCards()
+  const { tabs, addTab, removeTab } = useTabs()
+
+  const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
 
-  const [newCardName, setNewCardName] = useState('')
-  const [newCardCode, setNewCardCode] = useState('')
+  // 카드 추가 폼 상태
+  const [newCardName, setNewCardName]     = useState('')
+  const [newCardCode, setNewCardCode]     = useState('')
   const [newCardImageUrl, setNewCardImageUrl] = useState('')
   const [newCardCategory, setNewCardCategory] = useState<string>(tabs[0] ?? '')
-  const [newCardPrices, setNewCardPrices] = useState<Record<string, { enabled: boolean; price: number }>>(defaultPrices)
+  const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>({ ...emptyEnabled })
+  const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>({ ...emptyPrices })
 
+  // 카드 관리 검색
+  const [cardSearch, setCardSearch] = useState('')
+
+  // 탭 관리 입력
+  const [newTabName, setNewTabName] = useState('')
+
+  // 카드 추가 실행
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
-    const enabledRarities: Record<string, boolean> = {}
-    const prices = Object.entries(newCardPrices)
-      .filter(([, { enabled }]) => enabled)
-      .map(([rarity, { price }]) => {
-        enabledRarities[rarity] = true
-        return { rarity: rarity as 'N' | 'R' | 'SR' | 'UR' | 'UL' | 'SE' | 'PSR', price }
-      })
-    Object.keys(defaultPrices).forEach(r => { if (!enabledRarities[r]) enabledRarities[r] = false })
+    const prices = ALL_RARITIES
+      .filter(r => newCardEnabled[r])
+      .map(r => ({ rarity: r as RarityKey, price: newCardPrices[r] || 0 }))
+    const enabledRarities = { ...newCardEnabled }
 
     addCard({
-      name: newCardName,
-      code: newCardCode,
+      name: newCardName.trim(),
+      code: newCardCode.trim(),
       category: newCardCategory || (tabs[0] ?? '기타'),
-      imageUrl: newCardImageUrl || '/placeholder-card.svg',
+      imageUrl: newCardImageUrl.trim() || '/placeholder-card.svg',
       prices,
       enabledRarities,
       isStopped: prices.length === 0,
     })
+
     setNewCardName('')
     setNewCardCode('')
     setNewCardImageUrl('')
-    setNewCardPrices(defaultPrices)
+    setNewCardEnabled({ ...emptyEnabled })
+    setNewCardPrices({ ...emptyPrices })
     setActiveTab('orders')
   }
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
+  const filteredCards = cardSearch.trim()
+    ? cards.filter(c => c.name.includes(cardSearch) || c.code.includes(cardSearch))
+    : cards
+
+  const tabConfig: { key: AdminTab; label: string }[] = [
+    { key: 'orders',   label: '매입 요청' },
+    { key: 'add-card', label: '카드 추가' },
+    { key: 'cards',    label: '카드 관리' },
+    { key: 'tabs',     label: '탭 관리' },
+  ]
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="fixed left-1/2 top-1/2 z-50 flex h-[80vh] w-[85vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl">
+      <div className="fixed left-1/2 top-1/2 z-50 flex h-[85vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl">
 
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between border-b border-zinc-800 px-6 py-4">
@@ -88,30 +102,27 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           </button>
         </div>
 
-        {/* Tabs */}
+        {/* Tab Bar */}
         <div className="shrink-0 flex border-b border-zinc-800">
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'orders' ? 'border-b-2 border-amber-500 text-amber-500' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            매입 요청 관리
-          </button>
-          <button
-            onClick={() => setActiveTab('add-card')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'add-card' ? 'border-b-2 border-amber-500 text-amber-500' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <Plus className="mr-1 inline h-4 w-4" />
-            카드 추가
-          </button>
+          {tabConfig.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                activeTab === key
+                  ? 'border-b-2 border-amber-500 text-amber-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Scrollable Content */}
         <div className="min-h-0 flex-1 overflow-y-auto">
 
+          {/* ── 매입 요청 ── */}
           {activeTab === 'orders' && (
             <div className="p-6">
               {orders.length === 0 ? (
@@ -207,9 +218,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             </div>
           )}
 
+          {/* ── 카드 추가 ── */}
           {activeTab === 'add-card' && (
             <div className="p-6">
-              <div className="mx-auto max-w-xl space-y-6">
+              <div className="mx-auto max-w-xl space-y-5">
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">확장팩 탭 *</label>
@@ -257,39 +269,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">레어도별 매입가</label>
-                  <div className="space-y-3">
-                    {Object.entries(newCardPrices).map(([rarity, { enabled, price }]) => {
-                      const colors = rarityColors[rarity]
-                      return (
-                        <div
-                          key={rarity}
-                          className={`flex items-center gap-4 rounded-xl border p-3 transition-colors ${
-                            enabled ? 'border-zinc-700 bg-zinc-800/50' : 'border-zinc-800 bg-zinc-900/50'
-                          }`}
-                        >
-                          <Switch
-                            checked={enabled}
-                            onCheckedChange={(checked) =>
-                              setNewCardPrices(prev => ({ ...prev, [rarity]: { ...prev[rarity], enabled: checked } }))
-                            }
-                          />
-                          <span className={`w-12 rounded px-2 py-1 text-center text-sm font-bold ${colors.bg} ${colors.text}`}>
-                            {rarity}
-                          </span>
-                          <input
-                            type="number"
-                            value={price === 0 ? '' : price}
-                            onChange={(e) =>
-                              setNewCardPrices(prev => ({ ...prev, [rarity]: { ...prev[rarity], price: parseInt(e.target.value) || 0 } }))
-                            }
-                            disabled={!enabled}
-                            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-right text-white disabled:opacity-50"
-                          />
-                          <span className="text-sm text-zinc-500">원</span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <RarityPicker
+                    enabledRarities={newCardEnabled}
+                    prices={newCardPrices}
+                    onToggle={(rarity, enabled) =>
+                      setNewCardEnabled(prev => ({ ...prev, [rarity]: enabled }))
+                    }
+                    onPriceChange={(rarity, price) =>
+                      setNewCardPrices(prev => ({ ...prev, [rarity]: price }))
+                    }
+                  />
                 </div>
 
                 <button
@@ -300,6 +289,145 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   <Plus className="h-5 w-5" />
                   카드 추가
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── 카드 관리 ── */}
+          {activeTab === 'cards' && (
+            <div className="p-6">
+              {/* 검색 */}
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2">
+                <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                <input
+                  type="text"
+                  value={cardSearch}
+                  onChange={(e) => setCardSearch(e.target.value)}
+                  placeholder="카드명 또는 코드 검색..."
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                {filteredCards.length === 0 && (
+                  <p className="py-8 text-center text-sm text-zinc-500">카드가 없습니다</p>
+                )}
+                {filteredCards.map((card) => (
+                  <div
+                    key={card.id}
+                    className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-3"
+                  >
+                    {/* 썸네일 */}
+                    <div className="h-12 w-9 shrink-0 overflow-hidden rounded-lg bg-zinc-700">
+                      <img
+                        src={card.imageUrl}
+                        alt={card.name}
+                        className="h-full w-full object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.svg' }}
+                      />
+                    </div>
+
+                    {/* 정보 */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-white">{card.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-xs text-zinc-500">{card.code}</span>
+                        {card.prices.map(({ rarity }) => {
+                          const colors = rarityColors[rarity]
+                          const enabled = card.enabledRarities[rarity]
+                          return (
+                            <span
+                              key={rarity}
+                              className={`rounded px-1.5 py-0.5 text-xs font-bold ${enabled ? `${colors.bg} ${colors.text}` : 'bg-zinc-700 text-zinc-500'}`}
+                            >
+                              {rarity}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 매입 중지 / 재개 토글 */}
+                    <button
+                      onClick={() => setCardStopped(card.id, !card.isStopped)}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                        card.isStopped
+                          ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      {card.isStopped
+                        ? <><Play className="h-3.5 w-3.5" />재개</>
+                        : <><Ban className="h-3.5 w-3.5" />중지</>
+                      }
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 탭 관리 ── */}
+          {activeTab === 'tabs' && (
+            <div className="p-6">
+              <div className="mx-auto max-w-lg space-y-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTabName}
+                    onChange={(e) => setNewTabName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTabName.trim()) {
+                        addTab(newTabName.trim())
+                        setNewTabName('')
+                      }
+                    }}
+                    placeholder="새 확장팩명 (예: 버스트 오브 데스티니)"
+                    className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (newTabName.trim()) {
+                        addTab(newTabName.trim())
+                        setNewTabName('')
+                      }
+                    }}
+                    disabled={!newTabName.trim()}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {tabs.length === 0 && (
+                    <p className="py-8 text-center text-sm text-zinc-500">등록된 탭이 없습니다</p>
+                  )}
+                  {tabs.map((tab) => (
+                    <div
+                      key={tab}
+                      className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Layers className="h-4 w-4 text-zinc-500" />
+                        <span className="font-medium text-white">{tab}</span>
+                        <span className="text-xs text-zinc-500">
+                          {cards.filter(c => c.category === tab).length}장
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => removeTab(tab)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-zinc-600">
+                  * 탭 삭제 시 해당 탭의 카드는 숨겨집니다. 탭을 다시 추가하면 복원됩니다.
+                </p>
               </div>
             </div>
           )}

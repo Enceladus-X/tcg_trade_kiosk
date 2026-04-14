@@ -73,6 +73,18 @@ function addCard(card: Omit<CardWithStatus, 'id'>) {
   emitCardsChange()
 }
 
+function setCardStopped(cardId: string, stopped: boolean) {
+  const card = cardsStore.cards.find(c => c.id === cardId)
+  if (!card) return
+  if (stopped) {
+    const disabledRarities = Object.fromEntries(Object.keys(card.enabledRarities).map(r => [r, false]))
+    updateCard(cardId, { isStopped: true, enabledRarities: disabledRarities })
+  } else {
+    const enabledRarities = Object.fromEntries(card.prices.map(p => [p.rarity, true]))
+    updateCard(cardId, { isStopped: false, enabledRarities })
+  }
+}
+
 export function useCards() {
   const cards = useSyncExternalStore(subscribeCards, getCardsSnapshot, getCardsSnapshot)
   return {
@@ -83,6 +95,7 @@ export function useCards() {
     toggleRarity: useCallback(toggleRarity, []),
     updateRarityPrice: useCallback(updateRarityPrice, []),
     addCard: useCallback(addCard, []),
+    setCardStopped: useCallback(setCardStopped, []),
   }
 }
 
