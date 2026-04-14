@@ -4,7 +4,10 @@
   "private": true,
   "main": "electron/main.js",
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "sharp"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "sharp"
+    ]
   },
   "scripts": {
     "dev": "next dev",
@@ -81,7 +84,7 @@
   },
   "build": {
     "appId": "com.holick.tcg-kiosk",
-    "productName": "TCG 매입 키오스크",
+    "productName": "TCG_TRADE_KIOSK",
     "directories": {
       "output": "dist"
     },
@@ -101,12 +104,16 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "portable": {
-      "splashImage": null
+      "splashImage": null,
+      "artifactName": "TCG_TRADE_KIOSK.exe"
     }
-  }
+  },
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
 }
