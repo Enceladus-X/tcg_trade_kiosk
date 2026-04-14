@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "main": "electron/main.js",
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "sharp"]
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

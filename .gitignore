@@ -18,6 +18,8 @@ Thumbs.db
 # Electron build output
 dist/
 out/
+*.exe
+*.blockmap
 
 # Electron config (local)
 config.json
