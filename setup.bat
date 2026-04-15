@@ -61,7 +61,25 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Dependencies installed
 
-REM 4. Next.js build
+REM 4. .env.local check (required for Supabase connection since v0.2.0)
+echo.
+if not exist ".env.local" (
+    echo [ERROR] .env.local file not found.
+    echo.
+    echo  This file is required for Supabase connection.
+    echo  Create .env.local in this folder with the following content:
+    echo.
+    echo   NEXT_PUBLIC_SUPABASE_URL=^<your-supabase-url^>
+    echo   NEXT_PUBLIC_SUPABASE_ANON_KEY=^<your-anon-key^>
+    echo.
+    echo  Get these values from: https://supabase.com ^> Project Settings ^> API
+    echo.
+    pause
+    exit /b 1
+)
+echo [OK] .env.local found
+
+REM 5. Next.js build
 echo.
 echo [..] Building Next.js...
 pnpm build
@@ -72,7 +90,7 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Next.js build complete
 
-REM 5. Electron packaging
+REM 6. Electron packaging
 echo.
 echo [..] Packaging exe... (downloads Electron, may take several minutes)
 pnpm exec electron-builder
@@ -87,7 +105,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM 6. Copy all exe files from dist to project root
+REM 7. Copy all exe files from dist to project root
 echo.
 echo [..] Copying exe...
 set COPIED=0
