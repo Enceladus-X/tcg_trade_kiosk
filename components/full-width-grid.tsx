@@ -114,7 +114,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
           <div className="flex items-baseline gap-3">
             <span className="text-xl font-extrabold tracking-tight text-amber-400">
               {hasGames && selectedGame
-                ? games.find(g => g.id === selectedGame)?.name ?? '마린포드 싱글카드 매매표'
+                ? `${games.find(g => g.id === selectedGame)?.name ?? ''} 매입표`
                 : '마린포드 싱글카드 매매표'
               }
             </span>
