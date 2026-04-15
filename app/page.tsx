@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ShoppingCart } from 'lucide-react'
 import { FullWidthGrid } from '@/components/full-width-grid'
 import { CardDetailModal } from '@/components/card-detail-modal'
@@ -46,26 +47,41 @@ export default function POSPage() {
         </button>
       </div>
 
-      {selectedCard && (
-        <CardDetailModal card={selectedCard} onClose={() => setSelectedCard(null)} />
-      )}
+      <AnimatePresence>
+        {selectedCard && (
+          <CardDetailModal key="card-detail" card={selectedCard} onClose={() => setSelectedCard(null)} />
+        )}
+      </AnimatePresence>
 
-      {cartModalOpen && (
-        <CartListModal onClose={() => setCartModalOpen(false)} />
-      )}
+      <AnimatePresence>
+        {cartModalOpen && (
+          <CartListModal key="cart" onClose={() => setCartModalOpen(false)} />
+        )}
+      </AnimatePresence>
 
-      {showGlobalPinOverlay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <PinAuthOverlay
-            onSuccess={handleGlobalPinSuccess}
-            onCancel={() => setShowGlobalPinOverlay(false)}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {showGlobalPinOverlay && (
+          <motion.div
+            key="pin"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <PinAuthOverlay
+              onSuccess={handleGlobalPinSuccess}
+              onCancel={() => setShowGlobalPinOverlay(false)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {globalAdminModalOpen && (
-        <GlobalAdminModal onClose={() => setGlobalAdminModalOpen(false)} />
-      )}
+      <AnimatePresence>
+        {globalAdminModalOpen && (
+          <GlobalAdminModal key="admin" onClose={() => setGlobalAdminModalOpen(false)} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

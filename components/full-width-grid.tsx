@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Settings, Search, X, Power } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Settings, Search, X, Power, ChevronLeft, Gamepad2 } from 'lucide-react'
 import { searchCards, type CardWithStatus, type CardPrice, rarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
+import { useGames } from '@/lib/use-games'
 import { useStoreSettings } from '@/lib/use-settings'
 
 interface FullWidthGridProps {
@@ -24,23 +26,44 @@ function formatPrice(price: number): string {
 
 export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGridProps) {
   const { cards } = useCards()
-  const { tabs } = useTabs()
+  const { tabs, tabObjects } = useTabs()
+  const { games } = useGames()
   const { globalRarities } = useStoreSettings()
+
+  const [selectedGame, setSelectedGame] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<string>(() => tabs[0] ?? '')
   const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  const activeTab = tabs.includes(selectedTab) ? selectedTab : (tabs[0] ?? '')
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
+  const hasGames = games.length > 0
+
+  // 게임 선택 시 해당 게임의 첫 번째 탭으로 초기화
+  useEffect(() => {
+    if (selectedGame) {
+      const firstTab = tabObjects.find(t => t.game_id === selectedGame)
+      setSelectedTab(firstTab?.name ?? tabs[0] ?? '')
+    }
+    setSelectedRarity(null)
+    setSearchQuery('')
+  }, [selectedGame]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 현재 보여줄 탭 목록
+  const visibleTabs = useMemo(() => {
+    if (!hasGames) return tabs
+    if (selectedGame) return tabObjects.filter(t => t.game_id === selectedGame).map(t => t.name)
+    return []
+  }, [hasGames, selectedGame, tabs, tabObjects])
+
+  const activeTab = visibleTabs.includes(selectedTab) ? selectedTab : (visibleTabs[0] ?? '')
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus()
     else setSearchQuery('')
   }, [searchOpen])
 
-  // 탭 전환 시 레어도 필터 초기화
   useEffect(() => {
     setSelectedRarity(null)
   }, [activeTab])
@@ -54,7 +77,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
           card.prices.some(p => p.rarity === selectedRarity && p.price > 0)
         )
       : searched
-    // 각 카드의 활성 매입가 중 최고가 기준 내림차순 정렬
     return [...byRarity].sort((a, b) => {
       const maxPrice = (card: CardWithStatus) =>
         getActivePrices(card).reduce((max, p) => Math.max(max, p.price), 0)
@@ -66,87 +88,124 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
     <div className="flex h-full flex-col">
       {/* 매장 타이틀 배너 */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-6 py-2">
-        <div className="flex items-baseline gap-3">
-          <span className="text-xl font-extrabold tracking-tight text-amber-400">
-            마린포드 싱글카드 매매표
-          </span>
-          <span className="text-xs text-zinc-600">카드를 선택하면 매입가를 확인할 수 있습니다</span>
+        <div className="flex items-center gap-3">
+          {hasGames && selectedGame && (
+            <button
+              onClick={() => setSelectedGame(null)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          <div className="flex items-baseline gap-3">
+            <span className="text-xl font-extrabold tracking-tight text-amber-400">
+              {hasGames && selectedGame
+                ? games.find(g => g.id === selectedGame)?.name ?? '마린포드 싱글카드 매매표'
+                : '마린포드 싱글카드 매매표'
+              }
+            </span>
+            <span className="text-xs text-zinc-600">
+              {hasGames && !selectedGame ? '게임을 선택하세요' : '카드를 선택하면 매입가를 확인할 수 있습니다'}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          {searchOpen ? (
-            <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
-              <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="카드 검색..."
-                className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-white">
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div
-              className="flex flex-1 gap-1 overflow-x-auto"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+      {/* Header — 게임 선택 화면에선 검색/탭 숨김 */}
+      {(!hasGames || selectedGame) && (
+        <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            {searchOpen ? (
+              <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
+                <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="카드 검색..."
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className="flex flex-1 gap-1 overflow-x-auto"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+              >
+                {visibleTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setSelectedTab(tab)}
+                    className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                      activeTab === tab
+                        ? 'bg-amber-500 text-black'
+                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setSearchOpen(v => !v)}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
+                searchOpen
+                  ? 'border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+              }`}
             >
-              {tabs.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setSelectedTab(tab)}
-                  className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === tab
-                      ? 'bg-amber-500 text-black'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          )}
+              {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+            </button>
 
-          <button
-            onClick={() => setSearchOpen(v => !v)}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
-              searchOpen
-                ? 'border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-            }`}
-          >
-            {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-          </button>
+            <button
+              onClick={onGlobalAdminClick}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
 
+            {isElectron && (
+              <button
+                onClick={() => window.close()}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
+                title="프로그램 종료"
+              >
+                <Power className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 게임 대분류 없는 경우에만 상단 우측 설정 버튼 표시 */}
+      {hasGames && !selectedGame && (
+        <div className="flex items-center justify-end gap-2 px-4 py-2">
           <button
             onClick={onGlobalAdminClick}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             <Settings className="h-5 w-5" />
           </button>
-
           {isElectron && (
             <button
               onClick={() => window.close()}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
-              title="프로그램 종료"
             >
               <Power className="h-5 w-5" />
             </button>
           )}
         </div>
-      </div>
+      )}
 
       {/* 레어도 필터 바 */}
-      {globalRarities.length > 0 && (
+      {(!hasGames || selectedGame) && globalRarities.length > 0 && (
         <div
           className="shrink-0 flex items-center gap-2 overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-4 py-2"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
@@ -162,7 +221,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             전체
           </button>
           {globalRarities.map(rarity => {
-            const colors = rarityColors[rarity]
+            const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
             const isSelected = selectedRarity === rarity
             return (
               <button
@@ -181,28 +240,76 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
         </div>
       )}
 
-      {/* Card Grid
-          items-start: 타일 높이가 제각각일 때 행 높이에 맞춰 억지로 늘어나지 않도록.
-          가격 영역이 생기면서 타일 총 높이가 커지므로 xl 기준 7→6열로 조정.
-      */}
+      {/* 메인 콘텐츠 */}
       <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
-          {filteredCards.map((card) => (
-            <CardTile key={card.id} card={card} onClick={() => onCardClick(card)} />
-          ))}
-        </div>
+        <AnimatePresence mode="wait">
+          {/* 게임 대분류 선택 화면 */}
+          {hasGames && !selectedGame ? (
+            <motion.div
+              key="game-selector"
+              initial={{ opacity: 0, x: -24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <p className="mb-4 text-sm text-zinc-500">게임 카테고리를 선택하세요</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                {games.map((game, i) => (
+                  <motion.button
+                    key={game.id}
+                    onClick={() => setSelectedGame(game.id)}
+                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition-all hover:border-amber-500/50 hover:bg-zinc-800 active:scale-95"
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05, duration: 0.2 }}
+                  >
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-zinc-800 group-hover:bg-zinc-700">
+                      <Gamepad2 className="h-8 w-8 text-amber-400" />
+                    </div>
+                    <span className="text-center text-sm font-bold text-white">{game.name}</span>
+                    <span className="text-xs text-zinc-500">
+                      {tabObjects.filter(t => t.game_id === game.id).length}개 팩
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          ) : (
+            /* 카드 그리드 */
+            <motion.div
+              key={`cards-${activeTab}`}
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 24 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
+                {filteredCards.map((card, i) => (
+                  <motion.div
+                    key={card.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.15 }}
+                  >
+                    <CardTile card={card} onClick={() => onCardClick(card)} />
+                  </motion.div>
+                ))}
+              </div>
 
-        {filteredCards.length === 0 && (
-          <div className="flex h-64 items-center justify-center">
-            <p className="text-zinc-500">
-              {searchQuery
-                ? `"${searchQuery}" 검색 결과 없음`
-                : tabs.length === 0
-                ? '탭을 먼저 생성하세요'
-                : '카드가 없습니다'}
-            </p>
-          </div>
-        )}
+              {filteredCards.length === 0 && (
+                <div className="flex h-64 items-center justify-center">
+                  <p className="text-zinc-500">
+                    {searchQuery
+                      ? `"${searchQuery}" 검색 결과 없음`
+                      : visibleTabs.length === 0
+                      ? '탭을 먼저 생성하세요'
+                      : '카드가 없습니다'}
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -214,7 +321,7 @@ function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void
   return (
     <button
       onClick={onClick}
-      className="group relative overflow-hidden rounded-xl bg-zinc-900 transition-all active:scale-95 hover:ring-2 hover:ring-amber-500"
+      className="group relative w-full overflow-hidden rounded-xl bg-zinc-900 transition-all active:scale-95 hover:ring-2 hover:ring-amber-500"
       style={{ aspectRatio: '3 / 4' }}
     >
       <Image
@@ -242,7 +349,6 @@ function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void
   )
 }
 
-// 레어도별 뱃지 색상 — inline style로 동적 클래스 purge 문제 회피
 const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   N:   { bg: 'rgba(82,82,91,0.95)',    color: '#e4e4e7' },
   R:   { bg: 'rgba(37,99,235,0.95)',   color: '#fff'    },
@@ -253,7 +359,6 @@ const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   PSE: { bg: 'rgba(14,165,233,0.95)',  color: '#000'    },
 }
 
-// 레어도별 가격 텍스트 색상
 const RARITY_PRICE_COLOR: Record<string, string> = {
   N:   '#a1a1aa',
   R:   '#93c5fd',
@@ -268,14 +373,13 @@ function PriceOverlay({ prices }: { prices: CardPrice[] }) {
   const sorted = [...prices].sort((a, b) => b.price - a.price)
 
   return (
-    // 우측 하단에만 붙임 — 카드 좌측 아트워크 영역 침범 최소화
     <div
       className="absolute bottom-0 right-0 rounded-tl-lg px-3 py-2 backdrop-blur-sm"
       style={{ background: 'rgba(0,0,0,0.72)' }}
     >
       <div className="flex flex-col items-end gap-1">
         {sorted.map((p) => {
-          const badge      = RARITY_BADGE[p.rarity]      ?? RARITY_BADGE['N']
+          const badge      = RARITY_BADGE[p.rarity]      ?? { bg: 'rgba(82,82,91,0.95)', color: '#e4e4e7' }
           const priceColor = RARITY_PRICE_COLOR[p.rarity] ?? '#fff'
           return (
             <div key={p.rarity} className="flex items-center gap-1.5">

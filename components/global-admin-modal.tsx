@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins, Pencil } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useStoreSettings } from '@/lib/use-settings'
+import { CardDetailModal } from '@/components/card-detail-modal'
+import { type CardWithStatus } from '@/lib/mock-cards'
 import { formatPrice, rarityColors, type OrderStatus } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
@@ -56,8 +59,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>({ ...emptyEnabled })
   const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>({ ...emptyPrices })
 
-  // 카드 관리 검색
+  // 카드 관리 검색 + 수정 모달
   const [cardSearch, setCardSearch] = useState('')
+  const [adminEditCard, setAdminEditCard] = useState<CardWithStatus | null>(null)
 
   // 탭 관리 입력
   const [newTabName, setNewTabName] = useState('')
@@ -109,7 +113,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     <>
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="fixed left-1/2 top-1/2 z-50 flex h-[85vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl">
+      <motion.div
+        className="fixed left-1/2 top-1/2 z-50 flex h-[85vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        animate={{ opacity: 1, scale: 1, y: '-50%' }}
+        exit={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+      >
 
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between border-b border-zinc-800 px-6 py-4">
@@ -345,7 +355,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 {filteredCards.map((card) => (
                   <div
                     key={card.id}
-                    className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-3"
+                    className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-3 transition-colors hover:border-zinc-700 hover:bg-zinc-800/70"
                   >
                     {/* 썸네일 */}
                     <div className="h-12 w-9 shrink-0 overflow-hidden rounded-lg bg-zinc-700">
@@ -376,6 +386,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         })}
                       </div>
                     </div>
+
+                    {/* 수정 버튼 */}
+                    <button
+                      onClick={() => setAdminEditCard(card)}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-700/60 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      수정
+                    </button>
 
                     {/* 매입 중지 / 재개 토글 */}
                     <button
@@ -593,7 +612,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           )}
 
         </div>
-      </div>
+      </motion.div>
+
+      {/* 카드 수정 모달 (PIN 없이 직접 편집) */}
+      {adminEditCard && (
+        <CardDetailModal
+          card={adminEditCard}
+          onClose={() => setAdminEditCard(null)}
+          initialEditMode={true}
+        />
+      )}
     </>
   )
 }

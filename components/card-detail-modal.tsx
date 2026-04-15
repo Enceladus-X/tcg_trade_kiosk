@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
+import { motion } from 'framer-motion'
 import { Settings, Minus, Plus, Check, X, Save, Trash2 } from 'lucide-react'
 import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
@@ -13,14 +14,15 @@ import { ImageUploadField } from '@/components/image-upload-field'
 interface CardDetailModalProps {
   card: CardWithStatus
   onClose: () => void
+  initialEditMode?: boolean
 }
 
-export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
+export function CardDetailModal({ card, onClose, initialEditMode = false }: CardDetailModalProps) {
   const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showPinOverlay, setShowPinOverlay] = useState(false)
   const [added, setAdded] = useState(false)
-  const [editMode, setEditMode] = useState(false)
+  const [editMode, setEditMode] = useState(initialEditMode)
   
   // Edit mode state - 모든 레어도 포함
   const [editName, setEditName] = useState(card.name)
@@ -109,7 +111,13 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
       />
 
       {/* Modal - 70vw x 70vh */}
-      <div className="fixed left-1/2 top-1/2 z-50 flex h-[70vh] w-[70vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl">
+      <motion.div
+        className="fixed left-1/2 top-1/2 z-50 flex h-[70vh] w-[70vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        animate={{ opacity: 1, scale: 1, y: '-50%' }}
+        exit={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+      >
         {/* Settings Icon - Top Right (only in normal mode) */}
         {!editMode && (
           <button
@@ -371,7 +379,7 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
             onCancel={() => setShowPinOverlay(false)}
           />
         )}
-      </div>
+      </motion.div>
     </>
   )
 }

@@ -187,17 +187,19 @@ export function useCards() {
 export function useTabs() {
   const queryClient = useQueryClient()
 
-  const { data: tabs = [] } = useQuery({
+  const { data: tabObjects = [] } = useQuery({
     queryKey: TABS_KEY,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tabs')
-        .select('name')
+        .select('*')
         .order('sort_order', { ascending: true })
       if (error) throw error
-      return (data as { name: string }[]).map(r => r.name)
+      return data as import('./database.types').DbTab[]
     },
   })
+
+  const tabs = tabObjects.map(t => t.name)
 
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: TABS_KEY }),
@@ -227,7 +229,7 @@ export function useTabs() {
 
   return {
     tabs,
-    // mutateAsync: 에러를 호출부까지 전파해 UI에서 처리 가능
+    tabObjects,
     addTab: useCallback((name: string) => addMutation.mutateAsync(name), [addMutation]),
     removeTab: useCallback((name: string) => removeMutation.mutate(name), [removeMutation]),
     isAddingTab: addMutation.isPending,
