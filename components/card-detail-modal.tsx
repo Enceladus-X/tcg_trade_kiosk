@@ -111,11 +111,12 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
       />
 
       {/* Modal - 70vw x 70vh */}
+      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
       <motion.div
-        className="fixed left-1/2 top-1/2 z-50 flex h-[70vh] w-[70vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
-        initial={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
-        animate={{ opacity: 1, scale: 1, y: '-50%' }}
-        exit={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        className="flex h-[70vh] w-[70vw] overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{    opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
         {/* Settings Icon - Top Right (only in normal mode) */}
@@ -380,6 +381,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
           />
         )}
       </motion.div>
+      </div>
     </>
   )
 }

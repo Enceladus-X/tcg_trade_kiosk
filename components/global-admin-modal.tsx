@@ -118,11 +118,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     <>
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
+      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
       <motion.div
-        className="fixed left-1/2 top-1/2 z-50 flex h-[85vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
-        initial={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
-        animate={{ opacity: 1, scale: 1, y: '-50%' }}
-        exit={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        className="flex h-[85vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{    opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
 
@@ -725,6 +726,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
         </div>
       </motion.div>
+      </div>
 
       {/* 카드 수정 모달 (PIN 없이 직접 편집) */}
       {adminEditCard && (

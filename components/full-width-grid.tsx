@@ -64,9 +64,23 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
     else setSearchQuery('')
   }, [searchOpen])
 
+  // 현재 탭에서 실제로 존재하는 레어도만 필터 버튼 표시 (useEffect 보다 먼저 선언)
+  const activeRarities = useMemo(() => {
+    const byTab = cards.filter(c => c.category === activeTab)
+    const raritySet = new Set<string>()
+    byTab.forEach(card => {
+      card.prices.forEach(p => {
+        if (card.enabledRarities[p.rarity] && p.price > 0) raritySet.add(p.rarity)
+      })
+    })
+    return globalRarities.filter(r => raritySet.has(r))
+  }, [cards, activeTab, globalRarities])
+
   useEffect(() => {
-    setSelectedRarity(null)
-  }, [activeTab])
+    if (selectedRarity && !activeRarities.includes(selectedRarity)) {
+      setSelectedRarity(null)
+    }
+  }, [activeRarities]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCards = useMemo(() => {
     const byTab = cards.filter(c => c.category === activeTab)
@@ -205,7 +219,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
       )}
 
       {/* 레어도 필터 바 */}
-      {(!hasGames || selectedGame) && globalRarities.length > 0 && (
+      {(!hasGames || selectedGame) && activeRarities.length > 0 && (
         <div
           className="shrink-0 flex items-center gap-2 overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-4 py-2"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
@@ -220,7 +234,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
           >
             전체
           </button>
-          {globalRarities.map(rarity => {
+          {activeRarities.map(rarity => {
             const colors = getRarityColors(rarity)
             const isSelected = selectedRarity === rarity
             return (

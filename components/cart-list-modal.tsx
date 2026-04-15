@@ -69,11 +69,12 @@ export function CartListModal({ onClose }: CartListModalProps) {
       />
 
       {/* Modal */}
+      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
       <motion.div
-        className="fixed left-1/2 top-1/2 z-50 flex h-[70vh] w-[70vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
-        initial={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
-        animate={{ opacity: 1, scale: 1, y: '-50%' }}
-        exit={{ opacity: 0, scale: 0.96, y: 'calc(-50% + 12px)' }}
+        className="flex h-[70vh] w-[70vw] max-w-2xl flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{    opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
 
@@ -376,6 +377,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
           </>
         )}
       </motion.div>
+      </div>
     </>
   )
 }
