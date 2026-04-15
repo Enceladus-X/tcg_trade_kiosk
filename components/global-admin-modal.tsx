@@ -33,7 +33,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { cards, addCard, setCardStopped } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, assignTabToGame, isAdding: isAddingGame } = useGames()
-  const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, isUpdating } = useStoreSettings()
+  const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
@@ -43,6 +43,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [editMileagePercent, setEditMileagePercent] = useState<string>('')
   const [newRarityInput, setNewRarityInput] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSaved, setPasswordSaved] = useState(false)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
     const text = `${order.customerName} / ${order.bankName} / ${order.accountNumber} / ${order.phoneNumber}`
@@ -442,6 +446,49 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {activeTab === 'settings' && (
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-8">
+
+                {/* 관리자 비밀번호 변경 */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <Settings2 className="h-4 w-4 text-zinc-400" />
+                    관리자 비밀번호 변경
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => { setNewPassword(e.target.value); setPasswordError(null) }}
+                    placeholder="새 비밀번호 (4자 이상)"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(null) }}
+                    placeholder="새 비밀번호 확인"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+                  />
+                  {passwordError && (
+                    <p className="text-sm text-red-400">{passwordError}</p>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (newPassword.length < 4) { setPasswordError('비밀번호는 4자 이상이어야 합니다'); return }
+                      if (newPassword !== confirmPassword) { setPasswordError('비밀번호가 일치하지 않습니다'); return }
+                      await updateSettings({ admin_password: newPassword })
+                      setNewPassword('')
+                      setConfirmPassword('')
+                      setPasswordError(null)
+                      setPasswordSaved(true)
+                      setTimeout(() => setPasswordSaved(false), 2000)
+                    }}
+                    disabled={isUpdating || !newPassword || !confirmPassword}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-700 font-semibold text-white transition-all hover:bg-zinc-600 disabled:opacity-40"
+                  >
+                    {passwordSaved ? <><Check className="h-4 w-4 text-emerald-400" /> 변경 완료</> : '비밀번호 변경 저장'}
+                  </button>
+                </div>
+
+                <div className="border-t border-zinc-800" />
 
                 {/* 마일리지 지급 비율 (% 표기) */}
                 <div className="space-y-3">
