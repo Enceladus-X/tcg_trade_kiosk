@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Minus, Plus, Trash2, ShoppingBag, Check, ArrowRight, ArrowLeft, Coins, Banknote } from 'lucide-react'
 import { useCart } from '@/lib/use-cart'
 import { useOrders } from '@/lib/use-orders'
@@ -159,39 +159,48 @@ export function CartListModal({ onClose }: CartListModalProps) {
                   {errors.name && <p className="text-sm text-red-400">{errors.name}</p>}
                 </div>
 
-                {/* Bank Name - 현금 결제만 표시 */}
-                {paymentMethod === 'cash' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-400">은행명</label>
-                    <input
-                      type="text"
-                      value={formData.bankName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                      placeholder="예: 카카오뱅크"
-                      className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
-                        errors.bankName ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
-                      }`}
-                    />
-                    {errors.bankName && <p className="text-sm text-red-400">{errors.bankName}</p>}
-                  </div>
-                )}
-
-                {/* Account Number - 현금 결제만 표시 */}
-                {paymentMethod === 'cash' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-400">계좌번호</label>
-                    <input
-                      type="text"
-                      value={formData.accountNumber}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                      placeholder="예: 3333-01-1234567"
-                      className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
-                        errors.accountNumber ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
-                      }`}
-                    />
-                    {errors.accountNumber && <p className="text-sm text-red-400">{errors.accountNumber}</p>}
-                  </div>
-                )}
+                {/* Bank Name + Account Number - 현금 결제만 표시, AnimatePresence */}
+                <AnimatePresence initial={false}>
+                  {paymentMethod === 'cash' && (
+                    <motion.div
+                      key="cash-fields"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div className="space-y-5">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-zinc-400">은행명</label>
+                          <input
+                            type="text"
+                            value={formData.bankName}
+                            onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
+                            placeholder="예: 카카오뱅크"
+                            className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
+                              errors.bankName ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                            }`}
+                          />
+                          {errors.bankName && <p className="text-sm text-red-400">{errors.bankName}</p>}
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-zinc-400">계좌번호</label>
+                          <input
+                            type="text"
+                            value={formData.accountNumber}
+                            onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                            placeholder="예: 3333-01-1234567"
+                            className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
+                              errors.accountNumber ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                            }`}
+                          />
+                          {errors.accountNumber && <p className="text-sm text-red-400">{errors.accountNumber}</p>}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Phone Number (full) */}
                 <div className="space-y-2">

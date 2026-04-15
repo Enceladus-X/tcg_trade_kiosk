@@ -1,6 +1,6 @@
 'use client'
 
-import { rarityColors } from '@/lib/mock-cards'
+import { getRarityColors } from '@/lib/mock-cards'
 
 export const ALL_RARITIES = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'] as const
 export type RarityKey = typeof ALL_RARITIES[number]
@@ -20,7 +20,7 @@ export function RarityPicker({ enabledRarities, prices, onToggle, onPriceChange 
       {/* 레어도 칩 */}
       <div className="flex flex-wrap gap-2">
         {ALL_RARITIES.map(rarity => {
-          const colors = rarityColors[rarity]
+          const colors = getRarityColors(rarity)
           const enabled = !!enabledRarities[rarity]
           return (
             <button
@@ -43,7 +43,7 @@ export function RarityPicker({ enabledRarities, prices, onToggle, onPriceChange 
       {enabledList.length > 0 ? (
         <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
           {enabledList.map(rarity => {
-            const colors = rarityColors[rarity]
+            const colors = getRarityColors(rarity)
             return (
               <div key={rarity} className="flex items-center gap-3">
                 <span className={`w-12 shrink-0 rounded px-2 py-1 text-center text-xs font-bold ${colors.bg} ${colors.text}`}>

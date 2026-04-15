@@ -71,6 +71,26 @@ export const rarityColors: Record<string, { bg: string; text: string; border: st
   PSE: { bg: 'bg-sky-900',     text: 'text-sky-200',    border: 'border-sky-700' },
 }
 
+// 미등록 레어도에 대한 결정적 색상 할당 (동일 문자열 → 항상 같은 색)
+const EXTRA_RARITY_COLORS = [
+  { bg: 'bg-pink-900',   text: 'text-pink-200',   border: 'border-pink-700'   },
+  { bg: 'bg-teal-900',   text: 'text-teal-200',   border: 'border-teal-700'   },
+  { bg: 'bg-orange-900', text: 'text-orange-200',  border: 'border-orange-700' },
+  { bg: 'bg-indigo-900', text: 'text-indigo-200',  border: 'border-indigo-700' },
+  { bg: 'bg-lime-900',   text: 'text-lime-200',    border: 'border-lime-700'   },
+  { bg: 'bg-cyan-900',   text: 'text-cyan-200',    border: 'border-cyan-700'   },
+]
+
+function strHash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+export function getRarityColors(rarity: string) {
+  return rarityColors[rarity] ?? EXTRA_RARITY_COLORS[strHash(rarity) % EXTRA_RARITY_COLORS.length]
+}
+
 function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPrice[] {
   return (Object.entries(raw) as [CardPrice['rarity'], number][])
     .filter(([, price]) => price > 0)

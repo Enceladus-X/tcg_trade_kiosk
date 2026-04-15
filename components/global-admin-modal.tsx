@@ -6,9 +6,9 @@ import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useStoreSettings } from '@/lib/use-settings'
+import { useGames } from '@/lib/use-games'
 import { CardDetailModal } from '@/components/card-detail-modal'
-import { type CardWithStatus } from '@/lib/mock-cards'
-import { formatPrice, rarityColors, type OrderStatus } from '@/lib/mock-cards'
+import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
 
@@ -26,12 +26,13 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
 const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
 const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
 
-type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs' | 'settings'
+type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs' | 'games' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
-  const { tabs, addTab, removeTab, isAddingTab, addTabError } = useTabs()
+  const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
+  const { games, addGame, removeGame, assignTabToGame, isAdding: isAddingGame } = useGames()
   const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, isUpdating } = useStoreSettings()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
@@ -62,6 +63,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   // 카드 관리 검색 + 수정 모달
   const [cardSearch, setCardSearch] = useState('')
   const [adminEditCard, setAdminEditCard] = useState<CardWithStatus | null>(null)
+
+  // 게임 관리 입력
+  const [newGameName, setNewGameName] = useState('')
 
   // 탭 관리 입력
   const [newTabName, setNewTabName] = useState('')
@@ -106,6 +110,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     { key: 'add-card', label: '카드 추가' },
     { key: 'cards',    label: '카드 관리' },
     { key: 'tabs',     label: '탭 관리' },
+    { key: 'games',    label: '게임 관리' },
     { key: 'settings', label: '설정' },
   ]
 
@@ -220,10 +225,26 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             <div className="mb-4 space-y-2">
                               <p className="text-xs font-medium text-zinc-500">매입 품목</p>
                               {order.items.map((item, idx) => {
-                                const colors = rarityColors[item.rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
+                                const colors = getRarityColors(item.rarity)
+                                const cardImg = item.cardId
+                                  ? cards.find(c => c.id === item.cardId)?.imageUrl
+                                  : undefined
                                 return (
                                   <div key={idx} className="flex items-center justify-between rounded-lg bg-zinc-900 p-2">
                                     <div className="flex items-center gap-2">
+                                      {/* 카드 썸네일 */}
+                                      <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
+                                        {cardImg ? (
+                                          <img
+                                            src={cardImg}
+                                            alt={item.cardName}
+                                            className="h-full w-full object-contain"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                          />
+                                        ) : (
+                                          <div className="h-full w-full" />
+                                        )}
+                                      </div>
                                       <span className={`rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
                                       <span className="text-sm text-white">{item.cardName}</span>
                                       <span className="text-xs text-zinc-500">x{item.quantity}</span>
@@ -373,7 +394,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         <span className="text-xs text-zinc-500">{card.code}</span>
                         {card.prices.map(({ rarity }) => {
-                          const colors = rarityColors[rarity]
+                          const colors = getRarityColors(rarity)
                           const enabled = card.enabledRarities[rarity]
                           return (
                             <span
@@ -477,7 +498,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {globalRarities.map(rarity => {
-                          const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
+                          const colors = getRarityColors(rarity) ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
                           return (
                             <div key={rarity} className={`flex items-center gap-1 rounded-lg pl-2.5 pr-1 py-1 ${colors.bg}`}>
                               <span className={`text-sm font-black ${colors.text}`}>{rarity}</span>
@@ -527,6 +548,97 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   <p className="text-xs text-zinc-600">최대 5자. 키오스크 필터와 카드 편집 화면에 즉시 반영됩니다.</p>
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* ── 게임 관리 ── */}
+          {activeTab === 'games' && (
+            <div className="p-6">
+              <div className="mx-auto max-w-lg space-y-6">
+
+                {/* 새 게임 추가 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-300">게임 대분류 추가</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newGameName}
+                      onChange={(e) => setNewGameName(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && newGameName.trim()) {
+                          await addGame(newGameName.trim())
+                          setNewGameName('')
+                        }
+                      }}
+                      placeholder="예: 유희왕, 포켓몬카드"
+                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newGameName.trim()) return
+                        await addGame(newGameName.trim())
+                        setNewGameName('')
+                      }}
+                      disabled={isAddingGame || !newGameName.trim()}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 게임 목록 */}
+                {games.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-zinc-500">등록된 게임이 없습니다</p>
+                ) : (
+                  <div className="space-y-2">
+                    {games.map((game) => (
+                      <div key={game.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-white">{game.name}</p>
+                          <p className="text-xs text-zinc-500">
+                            {tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removeGame(game.id)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 탭-게임 배정 */}
+                {games.length > 0 && tabs.length > 0 && (
+                  <>
+                    <div className="border-t border-zinc-800" />
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-zinc-300">탭 → 게임 배정</label>
+                      <p className="text-xs text-zinc-600">각 탭(소분류)을 게임 대분류에 배정하세요</p>
+                      <div className="space-y-2">
+                        {tabObjects.map((tab) => (
+                          <div key={tab.name} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-2.5">
+                            <span className="flex-1 text-sm font-medium text-white">{tab.name}</span>
+                            <select
+                              value={tab.game_id ?? ''}
+                              onChange={(e) => assignTabToGame(tab.name, e.target.value || null)}
+                              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-amber-500 focus:outline-none"
+                            >
+                              <option value="">미배정</option>
+                              {games.map(g => (
+                                <option key={g.id} value={g.id}>{g.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

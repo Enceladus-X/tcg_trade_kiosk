@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Settings, Search, X, Power, ChevronLeft, Gamepad2 } from 'lucide-react'
-import { searchCards, type CardWithStatus, type CardPrice, rarityColors } from '@/lib/mock-cards'
+import { searchCards, type CardWithStatus, type CardPrice, rarityColors, getRarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useGames } from '@/lib/use-games'
 import { useStoreSettings } from '@/lib/use-settings'
@@ -221,7 +221,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             전체
           </button>
           {globalRarities.map(rarity => {
-            const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
+            const colors = getRarityColors(rarity)
             const isSelected = selectedRarity === rarity
             return (
               <button
@@ -358,6 +358,14 @@ const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   SE:  { bg: 'rgba(5,150,105,0.95)',   color: '#fff'    },
   PSE: { bg: 'rgba(14,165,233,0.95)',  color: '#000'    },
 }
+const EXTRA_BADGE: { bg: string; color: string }[] = [
+  { bg: 'rgba(131,24,67,0.95)',  color: '#fce7f3' },
+  { bg: 'rgba(19,78,74,0.95)',   color: '#ccfbf1' },
+  { bg: 'rgba(124,45,18,0.95)',  color: '#ffedd5' },
+  { bg: 'rgba(49,46,129,0.95)',  color: '#e0e7ff' },
+  { bg: 'rgba(54,83,20,0.95)',   color: '#ecfccb' },
+  { bg: 'rgba(22,78,99,0.95)',   color: '#cffafe' },
+]
 
 const RARITY_PRICE_COLOR: Record<string, string> = {
   N:   '#a1a1aa',
@@ -368,6 +376,15 @@ const RARITY_PRICE_COLOR: Record<string, string> = {
   SE:  '#6ee7b7',
   PSE: '#7dd3fc',
 }
+const EXTRA_PRICE_COLOR = ['#f9a8d4','#99f6e4','#fdba74','#a5b4fc','#bef264','#67e8f9']
+
+function strHashGrid(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+function getBadge(r: string)      { return RARITY_BADGE[r]       ?? EXTRA_BADGE[strHashGrid(r) % EXTRA_BADGE.length] }
+function getPriceColor(r: string) { return RARITY_PRICE_COLOR[r]  ?? EXTRA_PRICE_COLOR[strHashGrid(r) % EXTRA_PRICE_COLOR.length] }
 
 function PriceOverlay({ prices }: { prices: CardPrice[] }) {
   const sorted = [...prices].sort((a, b) => b.price - a.price)
@@ -379,8 +396,8 @@ function PriceOverlay({ prices }: { prices: CardPrice[] }) {
     >
       <div className="flex flex-col items-end gap-1">
         {sorted.map((p) => {
-          const badge      = RARITY_BADGE[p.rarity]      ?? { bg: 'rgba(82,82,91,0.95)', color: '#e4e4e7' }
-          const priceColor = RARITY_PRICE_COLOR[p.rarity] ?? '#fff'
+          const badge      = getBadge(p.rarity)
+          const priceColor = getPriceColor(p.rarity)
           return (
             <div key={p.rarity} className="flex items-center gap-1.5">
               <span
