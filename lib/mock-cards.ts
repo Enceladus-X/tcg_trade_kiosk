@@ -1,7 +1,7 @@
 // Card data - source: 유희왕_매입스프레드_시트.xlsx
 
 export interface CardPrice {
-  rarity: 'N' | 'R' | 'SR' | 'UR' | 'UL' | 'SE' | 'PSR'
+  rarity: 'N' | 'R' | 'SR' | 'UR' | 'UL' | 'SE' | 'PSE'
   price: number
 }
 
@@ -65,7 +65,7 @@ export const rarityColors: Record<string, { bg: string; text: string; border: st
   UR:  { bg: 'bg-rose-900',    text: 'text-rose-200',   border: 'border-rose-700' },
   UL:  { bg: 'bg-purple-900',  text: 'text-purple-200', border: 'border-purple-700' },
   SE:  { bg: 'bg-emerald-900', text: 'text-emerald-200',border: 'border-emerald-700' },
-  PSR: { bg: 'bg-sky-900',     text: 'text-sky-200',    border: 'border-sky-700' },
+  PSE: { bg: 'bg-sky-900',     text: 'text-sky-200',    border: 'border-sky-700' },
 }
 
 function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPrice[] {
@@ -75,7 +75,7 @@ function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPric
 }
 
 function makeEnabledRarities(prices: CardPrice[]): Record<string, boolean> {
-  const all: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR']
+  const all: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE']
   const priced = new Set(prices.map(p => p.rarity))
   return Object.fromEntries(all.map(r => [r, priced.has(r)]))
 }
@@ -101,31 +101,31 @@ function makeCard(
 }
 
 // 블레이징 도미니언 (BLZD) - 유희왕_매입스프레드_시트.xlsx 기준
-// 컬럼 매핑: C=N, D=R, E=SR, F=UR, G=UL, H=SE, I=PSR
+// 컬럼 매핑: C=N, D=R, E=SR, F=UR, G=UL, H=SE, I=PSE
 export const mockCards: CardWithStatus[] = [
   makeCard('BLZD-KR002', '파워 바이스드래곤',            '블레이징 도미니언', { SR: 700,   SE: 2500              }),
-  makeCard('BLZD-KR014', '엘펜노츠 레기나',              '블레이징 도미니언', { SR: 500,   SE: 2500,  PSR: 30000 }),
-  makeCard('BLZD-KR016', '페어리테일－매치리르',          '블레이징 도미니언', {            SE: 1000,  PSR: 10000 }),
+  makeCard('BLZD-KR014', '엘펜노츠 레기나',              '블레이징 도미니언', { SR: 500,   SE: 2500,  PSE: 30000 }),
+  makeCard('BLZD-KR016', '페어리테일－매치리르',          '블레이징 도미니언', {            SE: 1000,  PSE: 10000 }),
   makeCard('BLZD-KR018', '헤카톤케일 마키브엘',           '블레이징 도미니언', {            SE: 1000              }),
   makeCard('BLZD-KR020', '에니아크래프트－AtilE.SPIA',   '블레이징 도미니언', {            SE: 800               }),
-  makeCard('BLZD-KR021', '킬러튠 로터리',                '블레이징 도미니언', { SR: 500,   SE: 4000,  PSR: 25000 }),
-  makeCard('BLZD-KR024', '피드라울리스＝하르모니아',      '블레이징 도미니언', { UL: 30000, SE: 40000, PSR: 80000 }),
-  makeCard('BLZD-KR027', '혈수용희 드라세레아',           '블레이징 도미니언', {            SE: 1500,  PSR: 10000 }),
-  makeCard('BLZD-KR010', '혼절감옥신 비도리움',           '블레이징 도미니언', { UR: 1500,             PSR: 12000 }),
-  makeCard('BLZD-KR015', '크라운클랜 플레어',             '블레이징 도미니언', {            SE: 400,   PSR: 4500  }),
+  makeCard('BLZD-KR021', '킬러튠 로터리',                '블레이징 도미니언', { SR: 500,   SE: 4000,  PSE: 25000 }),
+  makeCard('BLZD-KR024', '피드라울리스＝하르모니아',      '블레이징 도미니언', { UL: 30000, SE: 40000, PSE: 80000 }),
+  makeCard('BLZD-KR027', '혈수용희 드라세레아',           '블레이징 도미니언', {            SE: 1500,  PSE: 10000 }),
+  makeCard('BLZD-KR010', '혼절감옥신 비도리움',           '블레이징 도미니언', { UR: 1500,             PSE: 12000 }),
+  makeCard('BLZD-KR015', '크라운클랜 플레어',             '블레이징 도미니언', {            SE: 400,   PSE: 4500  }),
   makeCard('BLZD-KR015B','크라운클랜 화이트페이스',        '블레이징 도미니언', {                                  }),
   makeCard('BLZD-KR030', '레지나 데몬',                   '블레이징 도미니언', {            SE: 500               }),
   makeCard('BLZD-KR033', '페어리테일을 엮는 자',          '블레이징 도미니언', {            SE: 1800              }),
-  makeCard('BLZD-KR034', '페어리테일을 이야기하는 자',    '블레이징 도미니언', {            SE: 1000,  PSR: 7000  }),
-  makeCard('BLZD-KR036', '더 크림즌 킹',                  '블레이징 도미니언', { UR: 500,   SE: 2000,  PSR: 15000 }),
-  makeCard('BLZD-KR038', '스카레드 하이퍼노바 드래곤',    '블레이징 도미니언', { UL: 700,   SE: 1500,  PSR: 10000 }),
-  makeCard('BLZD-KR042', '킬러튠 B2B',                    '블레이징 도미니언', { UR: 800,   SE: 4000,  PSR: 25000 }),
-  makeCard('BLZD-KR043', '초노급포탑열차 구스타프 로켓', '블레이징 도미니언', { UR: 500,              PSR: 6000  }),
+  makeCard('BLZD-KR034', '페어리테일을 이야기하는 자',    '블레이징 도미니언', {            SE: 1000,  PSE: 7000  }),
+  makeCard('BLZD-KR036', '더 크림즌 킹',                  '블레이징 도미니언', { UR: 500,   SE: 2000,  PSE: 15000 }),
+  makeCard('BLZD-KR038', '스카레드 하이퍼노바 드래곤',    '블레이징 도미니언', { UL: 700,   SE: 1500,  PSE: 10000 }),
+  makeCard('BLZD-KR042', '킬러튠 B2B',                    '블레이징 도미니언', { UR: 800,   SE: 4000,  PSE: 25000 }),
+  makeCard('BLZD-KR043', '초노급포탑열차 구스타프 로켓', '블레이징 도미니언', { UR: 500,              PSE: 6000  }),
   makeCard('BLZD-KR047', '페어리테일－위캣',              '블레이징 도미니언', {            SE: 2000              }),
   makeCard('BLZD-KR048', '헤루비담 이리스필',             '블레이징 도미니언', {            SE: 1000              }),
-  makeCard('BLZD-KR050', '사화요란의 령사',               '블레이징 도미니언', { UL: 4000,  SE: 7000,  PSR: 4000  }),
-  makeCard('BLZD-KR069', '초일융합',                      '블레이징 도미니언', { UR: 1000,             PSR: 9000  }),
-  makeCard('BLZD-KR077', '도미나스 스파크',               '블레이징 도미니언', { UL: 16000, SE: 22000, PSR: 80000 }),
+  makeCard('BLZD-KR050', '사화요란의 령사',               '블레이징 도미니언', { UL: 4000,  SE: 7000,  PSE: 4000  }),
+  makeCard('BLZD-KR069', '초일융합',                      '블레이징 도미니언', { UR: 1000,             PSE: 9000  }),
+  makeCard('BLZD-KR077', '도미나스 스파크',               '블레이징 도미니언', { UL: 16000, SE: 22000, PSE: 80000 }),
   makeCard('BLZD-KR079', '신의밀고',                      '블레이징 도미니언', { SR: 3500,  SE: 18000             }),
 ]
 

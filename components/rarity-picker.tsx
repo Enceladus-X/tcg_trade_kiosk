@@ -2,7 +2,7 @@
 
 import { rarityColors } from '@/lib/mock-cards'
 
-export const ALL_RARITIES = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSR'] as const
+export const ALL_RARITIES = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'] as const
 export type RarityKey = typeof ALL_RARITIES[number]
 
 interface RarityPickerProps {

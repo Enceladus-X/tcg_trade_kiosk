@@ -200,7 +200,7 @@ const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   UR:  { bg: 'rgba(225,29,72,0.95)',   color: '#fff'    },
   UL:  { bg: 'rgba(147,51,234,0.95)', color: '#fff'    },
   SE:  { bg: 'rgba(5,150,105,0.95)',   color: '#fff'    },
-  PSR: { bg: 'rgba(14,165,233,0.95)',  color: '#000'    },
+  PSE: { bg: 'rgba(14,165,233,0.95)',  color: '#000'    },
 }
 
 // 레어도별 가격 텍스트 색상
@@ -211,7 +211,7 @@ const RARITY_PRICE_COLOR: Record<string, string> = {
   UR:  '#fda4af',
   UL:  '#d8b4fe',
   SE:  '#6ee7b7',
-  PSR: '#7dd3fc',
+  PSE: '#7dd3fc',
 }
 
 function PriceOverlay({ prices }: { prices: CardPrice[] }) {

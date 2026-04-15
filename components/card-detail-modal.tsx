@@ -272,7 +272,7 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
                       <p className="text-sm font-medium text-zinc-400">레어도 선택</p>
                       <div className="grid grid-cols-4 gap-3">
                         {availableRarities.map(({ rarity, price }) => {
-                          const colors = rarityColors[rarity]
+                          const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
                           const isSelected = selectedRarity === rarity
                           return (
                             <button

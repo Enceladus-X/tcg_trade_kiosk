@@ -224,7 +224,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
               ) : (
                 <div className="divide-y divide-zinc-800 p-4">
                   {items.map((item) => {
-                    const colors = rarityColors[item.rarity]
+                    const colors = rarityColors[item.rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
                     return (
                       <div
                         key={`${item.cardId}-${item.rarity}`}
