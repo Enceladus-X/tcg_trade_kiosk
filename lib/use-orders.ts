@@ -15,9 +15,11 @@ function dbToOrder(row: DbOrder): PendingOrder {
     customerName: row.customer_name,
     bankName: row.bank_name,
     accountNumber: row.account_number,
-    phoneLast4: row.phone_last4,
+    phoneNumber: row.phone_number,
     totalPrice: row.total_price,
     status: row.status,
+    paymentMethod: row.payment_method,
+    mileageRate: row.mileage_rate,
     items: (row.order_items ?? []).map(item => ({
       cardId: item.card_id ?? '',
       cardName: item.card_name,
@@ -57,10 +59,16 @@ export function useOrders() {
     mutationFn: async ({
       items,
       customerData,
+      mileageRate,
     }: {
       items: CartItem[]
       customerData: CheckoutFormData
+      mileageRate?: number
     }) => {
+      const baseTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      const isMileage = customerData.paymentMethod === 'mileage'
+      const finalTotal = isMileage && mileageRate ? Math.round(baseTotal * mileageRate) : baseTotal
+
       // 1단계: orders 행 삽입
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -68,9 +76,11 @@ export function useOrders() {
           customer_name: customerData.name,
           bank_name: customerData.bankName,
           account_number: customerData.accountNumber,
-          phone_last4: customerData.phoneLast4,
-          total_price: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+          phone_number: customerData.phoneNumber,
+          total_price: finalTotal,
           status: 'pending',
+          payment_method: customerData.paymentMethod,
+          mileage_rate: isMileage ? (mileageRate ?? null) : null,
         })
         .select()
         .single()
@@ -127,8 +137,8 @@ export function useOrders() {
     paidOrders,
     pendingCount: pendingOrders.length,
     createOrder: useCallback(
-      (items: CartItem[], customerData: CheckoutFormData) =>
-        createMutation.mutateAsync({ items, customerData }),
+      (items: CartItem[], customerData: CheckoutFormData, mileageRate?: number) =>
+        createMutation.mutateAsync({ items, customerData, mileageRate }),
       [createMutation]
     ),
     updateOrderStatus: useCallback(

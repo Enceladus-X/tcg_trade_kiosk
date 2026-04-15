@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
+import { useStoreSettings } from '@/lib/use-settings'
 import { formatPrice, rarityColors, type OrderStatus } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
@@ -22,15 +23,30 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
 const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
 const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
 
-type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs'
+type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
   const { tabs, addTab, removeTab, isAddingTab, addTabError } = useTabs()
+  const { mileageRate, globalRarities, updateSettings, isUpdating } = useStoreSettings()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
+
+  // 설정 탭 로컬 상태
+  const [editMileageRate, setEditMileageRate] = useState<string>('')
+  const [editRarities, setEditRarities] = useState<string[]>([])
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
+  const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
+    const text = `${order.customerName} / ${order.bankName} / ${order.accountNumber} / ${order.phoneNumber}`
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedOrderId(order.id)
+      setTimeout(() => setCopiedOrderId(null), 2000)
+    })
+  }, [orders])
 
   // 카드 추가 폼 상태
   const [newCardName, setNewCardName]     = useState('')
@@ -86,6 +102,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     { key: 'add-card', label: '카드 추가' },
     { key: 'cards',    label: '카드 관리' },
     { key: 'tabs',     label: '탭 관리' },
+    { key: 'settings', label: '설정' },
   ]
 
   return (
@@ -160,13 +177,28 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
                                 <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{order.bankName}</span>
                                 <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" />{order.accountNumber}</span>
-                                <span className="flex items-center gap-1"><Phone className="h-3 w-3" />****{order.phoneLast4}</span>
+                                <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{order.phoneNumber}</span>
+                                {order.paymentMethod === 'mileage' && (
+                                  <span className="flex items-center gap-1 text-emerald-400"><Coins className="h-3 w-3" />마일리지</span>
+                                )}
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); copyCustomerInfo(order) }}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-700 text-zinc-400 transition-colors hover:bg-zinc-600 hover:text-white"
+                              title="고객 정보 복사"
+                            >
+                              {copiedOrderId === order.id
+                                ? <Check className="h-4 w-4 text-emerald-400" />
+                                : <Copy className="h-4 w-4" />
+                              }
+                            </button>
                             <div className="text-right">
-                              <p className="text-lg font-bold text-amber-500">{formatPrice(order.totalPrice)}</p>
+                              <p className={`text-lg font-bold ${order.paymentMethod === 'mileage' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                                {formatPrice(order.totalPrice)}
+                              </p>
                               <p className="text-xs text-zinc-500">{formatDate(order.createdAt)}</p>
                             </div>
                             {isExpanded ? <ChevronUp className="h-5 w-5 text-zinc-500" /> : <ChevronDown className="h-5 w-5 text-zinc-500" />}
@@ -178,7 +210,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             <div className="mb-4 space-y-2">
                               <p className="text-xs font-medium text-zinc-500">매입 품목</p>
                               {order.items.map((item, idx) => {
-                                const colors = rarityColors[item.rarity]
+                                const colors = rarityColors[item.rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
                                 return (
                                   <div key={idx} className="flex items-center justify-between rounded-lg bg-zinc-900 p-2">
                                     <div className="flex items-center gap-2">
@@ -361,6 +393,91 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 설정 ── */}
+          {activeTab === 'settings' && (
+            <div className="p-6">
+              <div className="mx-auto max-w-lg space-y-6">
+
+                {/* 마일리지 비율 */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-zinc-400">
+                    <Coins className="h-4 w-4" />
+                    마일리지 지급 비율
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="1"
+                      max="3"
+                      defaultValue={mileageRate}
+                      onChange={(e) => setEditMileageRate(e.target.value)}
+                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-amber-500 focus:outline-none"
+                    />
+                    <span className="shrink-0 text-sm text-zinc-400">배수</span>
+                  </div>
+                  <p className="text-xs text-zinc-600">
+                    현재: x{mileageRate.toFixed(2)} — 매입가의 {((mileageRate - 1) * 100).toFixed(0)}% 추가 지급
+                  </p>
+                </div>
+
+                {/* 활성 레어도 */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-zinc-400">
+                    <Settings2 className="h-4 w-4" />
+                    전역 활성 레어도
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {ALL_RARITIES.map(rarity => {
+                      const isActive = (editRarities.length > 0 ? editRarities : globalRarities).includes(rarity)
+                      const colors = rarityColors[rarity]
+                      return (
+                        <button
+                          key={rarity}
+                          type="button"
+                          onClick={() => {
+                            const current = editRarities.length > 0 ? editRarities : [...globalRarities]
+                            setEditRarities(
+                              isActive ? current.filter(r => r !== rarity) : [...current, rarity]
+                            )
+                          }}
+                          className={`rounded-lg px-3 py-1.5 text-sm font-bold transition-all active:scale-95 ${
+                            isActive
+                              ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
+                              : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {rarity}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-zinc-600">키오스크 필터 및 카드 추가 시 표시되는 레어도를 제어합니다</p>
+                </div>
+
+                {/* 저장 */}
+                <button
+                  onClick={async () => {
+                    const rate = editMileageRate ? parseFloat(editMileageRate) : mileageRate
+                    const rarities = editRarities.length > 0 ? editRarities : globalRarities
+                    await updateSettings({ mileage_rate: rate, global_rarities: rarities })
+                    setEditMileageRate('')
+                    setEditRarities([])
+                    setSettingsSaved(true)
+                    setTimeout(() => setSettingsSaved(false), 2000)
+                  }}
+                  disabled={isUpdating}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 font-semibold text-black transition-all hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {settingsSaved
+                    ? <><Check className="h-4 w-4" />저장 완료</>
+                    : isUpdating ? '저장 중...' : '설정 저장'
+                  }
+                </button>
               </div>
             </div>
           )}

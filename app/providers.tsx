@@ -34,10 +34,18 @@ function RealtimeSubscriptions() {
       })
       .subscribe()
 
+    const settingsChannel = supabase
+      .channel('rt-store-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings' }, () => {
+        qc.invalidateQueries({ queryKey: ['store_settings'] })
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(cardsChannel)
       supabase.removeChannel(tabsChannel)
       supabase.removeChannel(ordersChannel)
+      supabase.removeChannel(settingsChannel)
     }
   }, [qc])
 

@@ -1,11 +1,12 @@
 'use client'
 
-import { Minus, Plus, Trash2, ShoppingBag, Check, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, Check, ArrowRight, ArrowLeft, Coins, Banknote } from 'lucide-react'
 import { useCart } from '@/lib/use-cart'
 import { useOrders } from '@/lib/use-orders'
+import { useStoreSettings } from '@/lib/use-settings'
 import { rarityColors, formatPrice, type CheckoutFormData } from '@/lib/mock-cards'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 interface CartListModalProps {
   onClose: () => void
@@ -14,37 +15,43 @@ interface CartListModalProps {
 export function CartListModal({ onClose }: CartListModalProps) {
   const { items, total, updateQuantity, removeItem, clearCart } = useCart()
   const { createOrder } = useOrders()
+  const { mileageRate } = useStoreSettings()
+
   const [step, setStep] = useState<'list' | 'checkout' | 'success'>('list')
-  const [formData, setFormData] = useState<CheckoutFormData>({
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mileage'>('cash')
+  const [formData, setFormData] = useState<Omit<CheckoutFormData, 'paymentMethod'>>({
     name: '',
     bankName: '',
     accountNumber: '',
-    phoneLast4: '',
+    phoneNumber: '',
   })
-  const [errors, setErrors] = useState<Partial<Record<keyof CheckoutFormData, string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({})
+
+  const mileageTotal = useMemo(() => Math.round(total * mileageRate), [total, mileageRate])
+  const effectiveTotal = paymentMethod === 'mileage' ? mileageTotal : total
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<Record<keyof CheckoutFormData, string>> = {}
-    
+    const newErrors: Partial<Record<keyof typeof formData, string>> = {}
+
     if (!formData.name.trim()) newErrors.name = '이름을 입력해주세요'
     if (!formData.bankName.trim()) newErrors.bankName = '은행명을 입력해주세요'
     if (!formData.accountNumber.trim()) newErrors.accountNumber = '계좌번호를 입력해주세요'
-    if (!formData.phoneLast4.trim()) {
-      newErrors.phoneLast4 = '전화번호 뒷자리를 입력해주세요'
-    } else if (!/^\d{4}$/.test(formData.phoneLast4)) {
-      newErrors.phoneLast4 = '4자리 숫자를 입력해주세요'
+    if (!formData.phoneNumber.trim()) {
+      newErrors.phoneNumber = '전화번호를 입력해주세요'
+    } else if (!/^\d{10,11}$/.test(formData.phoneNumber.replace(/-/g, ''))) {
+      newErrors.phoneNumber = '올바른 전화번호를 입력해주세요 (예: 01012345678)'
     }
-    
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = () => {
     if (!validateForm()) return
-    
-    createOrder(items, formData)
+
+    createOrder(items, { ...formData, paymentMethod }, paymentMethod === 'mileage' ? mileageRate : undefined)
     setStep('success')
-    
+
     setTimeout(() => {
       clearCart()
       onClose()
@@ -61,7 +68,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
 
       {/* Modal */}
       <div className="fixed left-1/2 top-1/2 z-50 flex h-[70vh] w-[70vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-zinc-900 shadow-2xl">
-        
+
         {/* Success State */}
         {step === 'success' && (
           <div className="flex h-full flex-col items-center justify-center p-8">
@@ -79,7 +86,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
         {/* Checkout Form */}
         {step === 'checkout' && (
           <>
-            {/* Header */}
             <div className="flex items-center gap-3 border-b border-zinc-800 px-6 py-4">
               <button
                 onClick={() => setStep('list')}
@@ -93,9 +99,43 @@ export function CartListModal({ onClose }: CartListModalProps) {
               </div>
             </div>
 
-            {/* Form */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-5">
+
+                {/* Payment Method Toggle */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-400">지급 방식</label>
+                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-zinc-700 bg-zinc-800 p-1">
+                    <button
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-all ${
+                        paymentMethod === 'cash'
+                          ? 'bg-amber-500 text-black'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <Banknote className="h-4 w-4" />
+                      현금 지급
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod('mileage')}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-all ${
+                        paymentMethod === 'mileage'
+                          ? 'bg-emerald-500 text-black'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <Coins className="h-4 w-4" />
+                      마일리지 지급
+                    </button>
+                  </div>
+                  {paymentMethod === 'mileage' && (
+                    <p className="text-xs text-emerald-400">
+                      마일리지 선택 시 x{mileageRate.toFixed(2)} 적용 ({formatPrice(mileageTotal)})
+                    </p>
+                  )}
+                </div>
+
                 {/* Name */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">이름</label>
@@ -141,41 +181,54 @@ export function CartListModal({ onClose }: CartListModalProps) {
                   {errors.accountNumber && <p className="text-sm text-red-400">{errors.accountNumber}</p>}
                 </div>
 
-                {/* Phone Last 4 */}
+                {/* Phone Number (full) */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-400">전화번호 뒷자리 (4자리)</label>
+                  <label className="text-sm font-medium text-zinc-400">전화번호</label>
                   <input
-                    type="text"
-                    value={formData.phoneLast4}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phoneLast4: e.target.value.slice(0, 4) }))}
-                    placeholder="예: 1234"
-                    maxLength={4}
+                    type="tel"
+                    value={formData.phoneNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value.replace(/[^0-9]/g, '').slice(0, 11) }))}
+                    placeholder="예: 01012345678"
+                    maxLength={11}
                     className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
-                      errors.phoneLast4 ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                      errors.phoneNumber ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
                     }`}
                   />
-                  {errors.phoneLast4 && <p className="text-sm text-red-400">{errors.phoneLast4}</p>}
+                  {errors.phoneNumber && <p className="text-sm text-red-400">{errors.phoneNumber}</p>}
                 </div>
 
                 {/* Summary */}
-                <div className="mt-6 rounded-xl bg-zinc-800/50 p-4">
+                <div className="mt-6 rounded-xl bg-zinc-800/50 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-400">총 {items.length}종</span>
                     <span className="text-zinc-400">{items.reduce((sum, i) => sum + i.quantity, 0)}장</span>
                   </div>
-                  <div className="mt-2 flex justify-between">
-                    <span className="text-zinc-400">매입 금액</span>
-                    <span className="text-xl font-bold text-amber-500">{formatPrice(total)}</span>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">기본 매입가</span>
+                    <span className="text-sm font-medium text-zinc-300">{formatPrice(total)}</span>
                   </div>
+                  {paymentMethod === 'mileage' && (
+                    <div className="flex justify-between border-t border-zinc-700 pt-2">
+                      <span className="text-emerald-400">마일리지 지급액 (x{mileageRate.toFixed(2)})</span>
+                      <span className="text-xl font-bold text-emerald-400">{formatPrice(mileageTotal)}</span>
+                    </div>
+                  )}
+                  {paymentMethod === 'cash' && (
+                    <div className="flex justify-between border-t border-zinc-700 pt-2">
+                      <span className="text-zinc-400">현금 지급액</span>
+                      <span className="text-xl font-bold text-amber-500">{formatPrice(total)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Submit Button */}
             <div className="border-t border-zinc-800 p-6">
               <button
                 onClick={handleSubmit}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 text-lg font-semibold text-black transition-all hover:bg-amber-400 active:scale-[0.98]"
+                className={`flex h-14 w-full items-center justify-center gap-2 rounded-xl text-lg font-semibold text-black transition-all hover:opacity-90 active:scale-[0.98] ${
+                  paymentMethod === 'mileage' ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
               >
                 매입 요청 제출
               </button>
@@ -186,7 +239,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
         {/* Cart List */}
         {step === 'list' && (
           <>
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
@@ -209,7 +261,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
               )}
             </div>
 
-            {/* Items List */}
             <ScrollArea className="flex-1">
               {items.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
@@ -230,12 +281,9 @@ export function CartListModal({ onClose }: CartListModalProps) {
                         key={`${item.cardId}-${item.rarity}`}
                         className="flex items-center gap-4 py-4"
                       >
-                        {/* Card Info */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}
-                            >
+                            <span className={`inline-flex rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>
                               {item.rarity}
                             </span>
                             <span className="truncate text-sm font-medium text-white">
@@ -245,7 +293,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
                           <p className="mt-1 text-xs text-zinc-500">{item.cardCode}</p>
                         </div>
 
-                        {/* Quantity Controls */}
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => updateQuantity(item.cardId, item.rarity, item.quantity - 1)}
@@ -264,7 +311,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
                           </button>
                         </div>
 
-                        {/* Price */}
                         <div className="w-28 text-right">
                           <p className="font-semibold text-white">
                             {formatPrice(item.price * item.quantity)}
@@ -276,7 +322,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
                           )}
                         </div>
 
-                        {/* Remove */}
                         <button
                           onClick={() => removeItem(item.cardId, item.rarity)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:bg-red-500/20 hover:text-red-400"
@@ -290,7 +335,6 @@ export function CartListModal({ onClose }: CartListModalProps) {
               )}
             </ScrollArea>
 
-            {/* Footer */}
             {items.length > 0 && (
               <div className="border-t border-zinc-800 p-6">
                 <div className="mb-4 flex items-baseline justify-between">

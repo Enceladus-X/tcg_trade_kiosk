@@ -27,10 +27,20 @@ export type DbOrder = {
   customer_name: string
   bank_name: string
   account_number: string
-  phone_last4: string
+  phone_number: string
   total_price: number
   status: OrderStatus
+  payment_method: 'cash' | 'mileage'
+  mileage_rate: number | null
   order_items?: DbOrderItem[]
+}
+
+export type DbStoreSettings = {
+  id: number
+  admin_password: string
+  mileage_rate: number
+  global_rarities: string[]
+  updated_at: string
 }
 
 export type DbOrderItem = {

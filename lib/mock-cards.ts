@@ -45,17 +45,20 @@ export interface PendingOrder {
   customerName: string
   bankName: string
   accountNumber: string
-  phoneLast4: string
+  phoneNumber: string
   items: CartItem[]
   totalPrice: number
   status: OrderStatus
+  paymentMethod: 'cash' | 'mileage'
+  mileageRate: number | null
 }
 
 export interface CheckoutFormData {
   name: string
   bankName: string
   accountNumber: string
-  phoneLast4: string
+  phoneNumber: string
+  paymentMethod: 'cash' | 'mileage'
 }
 
 export const rarityColors: Record<string, { bg: string; text: string; border: string }> = {
