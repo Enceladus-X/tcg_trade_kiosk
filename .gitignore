@@ -7,6 +7,10 @@ next-env.d.ts
 
 # Environment variables
 .env*.local
+.env
+.env.development
+.env.production
+.env.test
 
 # OS
 .DS_Store
@@ -23,3 +27,13 @@ out/
 
 # Electron config (local)
 config.json
+
+# 로컬 카드 이미지 원본 (Supabase Storage에 업로드 후 불필요)
+card_images/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Debug logs
+pnpm-debug.log*
+npm-debug.log*

@@ -1,171 +1,236 @@
 'use client'
 
-import { useCallback, useSyncExternalStore } from 'react'
-import { type CardWithStatus, type CardPrice, mockCards } from './mock-cards'
+import { useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { supabase } from './supabase'
+import { type CardWithStatus, type CardPrice } from './mock-cards'
+import { type DbCard } from './database.types'
 
-const CARDS_KEY = 'tcg_kiosk_cards'
-const TABS_KEY  = 'tcg_kiosk_tabs'
+// --- 타입 변환 ---
 
-function loadFromStorage<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch {
-    return fallback
+function dbToCard(row: DbCard): CardWithStatus {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    category: row.category,
+    imageUrl: row.image_url,
+    prices: row.prices,
+    isStopped: row.is_stopped,
+    enabledRarities: row.enabled_rarities,
   }
 }
 
-function saveToStorage(key: string, value: unknown) {
-  if (typeof window === 'undefined') return
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+function cardToDb(card: Partial<CardWithStatus>): Partial<DbCard> {
+  const db: Partial<DbCard> = {}
+  if (card.name !== undefined)            db.name = card.name
+  if (card.code !== undefined)            db.code = card.code
+  if (card.category !== undefined)        db.category = card.category
+  if (card.imageUrl !== undefined)        db.image_url = card.imageUrl
+  if (card.isStopped !== undefined)       db.is_stopped = card.isStopped
+  if (card.prices !== undefined)          db.prices = card.prices
+  if (card.enabledRarities !== undefined) db.enabled_rarities = card.enabledRarities
+  return db
 }
 
-// --- Cards Store ---
-type CardsStore = {
-  cards: CardWithStatus[]
-  listeners: Set<() => void>
-}
+// --- 쿼리 키 ---
 
-const cardsStore: CardsStore = {
-  cards: loadFromStorage<CardWithStatus[]>(CARDS_KEY, [...mockCards]),
-  listeners: new Set(),
-}
+const CARDS_KEY = ['cards'] as const
+const TABS_KEY  = ['tabs'] as const
 
-function emitCardsChange() {
-  saveToStorage(CARDS_KEY, cardsStore.cards)
-  cardsStore.listeners.forEach(l => l())
-}
-
-function subscribeCards(listener: () => void) {
-  cardsStore.listeners.add(listener)
-  return () => cardsStore.listeners.delete(listener)
-}
-
-function getCardsSnapshot(): CardWithStatus[] {
-  return cardsStore.cards
-}
-
-function updateCard(cardId: string, updates: Partial<CardWithStatus>) {
-  cardsStore.cards = cardsStore.cards.map(card => {
-    if (card.id !== cardId) return card
-    const updated = { ...card, ...updates }
-    if (updates.enabledRarities) {
-      updated.isStopped = Object.values(updates.enabledRarities).every(v => !v)
-    }
-    return updated
-  })
-  emitCardsChange()
-}
-
-function updateCardImage(cardId: string, imageUrl: string) {
-  updateCard(cardId, { imageUrl })
-}
-
-function updateCardName(cardId: string, name: string) {
-  updateCard(cardId, { name })
-}
-
-function toggleRarity(cardId: string, rarity: string, enabled: boolean) {
-  const card = cardsStore.cards.find(c => c.id === cardId)
-  if (!card) return
-  const newEnabledRarities = { ...card.enabledRarities, [rarity]: enabled }
-  updateCard(cardId, {
-    enabledRarities: newEnabledRarities,
-    isStopped: Object.values(newEnabledRarities).every(v => !v),
-  })
-}
-
-function updateRarityPrice(cardId: string, rarity: string, price: number) {
-  const card = cardsStore.cards.find(c => c.id === cardId)
-  if (!card) return
-  const exists = card.prices.find(p => p.rarity === rarity)
-  const newPrices = exists
-    ? card.prices.map(p => p.rarity === rarity ? { ...p, price } : p)
-    : [...card.prices, { rarity: rarity as CardPrice['rarity'], price }]
-  updateCard(cardId, { prices: newPrices })
-}
-
-function addCard(card: Omit<CardWithStatus, 'id'>) {
-  const newCard: CardWithStatus = { ...card, id: `card-${Date.now()}` }
-  cardsStore.cards = [newCard, ...cardsStore.cards]
-  emitCardsChange()
-}
-
-function deleteCard(cardId: string) {
-  cardsStore.cards = cardsStore.cards.filter(c => c.id !== cardId)
-  emitCardsChange()
-}
-
-function setCardStopped(cardId: string, stopped: boolean) {
-  const card = cardsStore.cards.find(c => c.id === cardId)
-  if (!card) return
-  if (stopped) {
-    const disabledRarities = Object.fromEntries(Object.keys(card.enabledRarities).map(r => [r, false]))
-    updateCard(cardId, { isStopped: true, enabledRarities: disabledRarities })
-  } else {
-    const enabledRarities = Object.fromEntries(card.prices.map(p => [p.rarity, true]))
-    updateCard(cardId, { isStopped: false, enabledRarities })
-  }
-}
+// --- useCards ---
 
 export function useCards() {
-  const cards = useSyncExternalStore(subscribeCards, getCardsSnapshot, getCardsSnapshot)
+  const queryClient = useQueryClient()
+
+  const { data: cards = [] } = useQuery({
+    queryKey: CARDS_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cards')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data as DbCard[]).map(dbToCard)
+    },
+  })
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: CARDS_KEY }),
+    [queryClient]
+  )
+
+  // 단일 필드 업데이트 (이미지, 이름 등 공통 처리)
+  const updateMutation = useMutation({
+    mutationFn: async ({ cardId, updates }: { cardId: string; updates: Partial<CardWithStatus> }) => {
+      const { error } = await supabase
+        .from('cards')
+        .update(cardToDb(updates))
+        .eq('id', cardId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const addMutation = useMutation({
+    mutationFn: async (card: Omit<CardWithStatus, 'id'>) => {
+      const { error } = await supabase.from('cards').insert({
+        name: card.name,
+        code: card.code,
+        category: card.category,
+        image_url: card.imageUrl,
+        is_stopped: card.isStopped,
+        prices: card.prices,
+        enabled_rarities: card.enabledRarities,
+      })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (cardId: string) => {
+      const { error } = await supabase.from('cards').delete().eq('id', cardId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  // 캐시에서 현재 카드 상태를 읽어 연산 후 업데이트하는 헬퍼
+  function getCard(cardId: string): CardWithStatus | undefined {
+    const cached = queryClient.getQueryData<CardWithStatus[]>(CARDS_KEY)
+    return cached?.find(c => c.id === cardId)
+  }
+
+  const updateCard = useCallback(
+    (cardId: string, updates: Partial<CardWithStatus>) =>
+      updateMutation.mutate({ cardId, updates }),
+    [updateMutation]
+  )
+
+  const updateCardImage = useCallback(
+    (cardId: string, imageUrl: string) =>
+      updateMutation.mutate({ cardId, updates: { imageUrl } }),
+    [updateMutation]
+  )
+
+  const updateCardName = useCallback(
+    (cardId: string, name: string) =>
+      updateMutation.mutate({ cardId, updates: { name } }),
+    [updateMutation]
+  )
+
+  const toggleRarity = useCallback(
+    (cardId: string, rarity: string, enabled: boolean) => {
+      const card = getCard(cardId)
+      if (!card) return
+      const newEnabledRarities = { ...card.enabledRarities, [rarity]: enabled }
+      updateMutation.mutate({
+        cardId,
+        updates: {
+          enabledRarities: newEnabledRarities,
+          isStopped: Object.values(newEnabledRarities).every(v => !v),
+        },
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateMutation]
+  )
+
+  const updateRarityPrice = useCallback(
+    (cardId: string, rarity: string, price: number) => {
+      const card = getCard(cardId)
+      if (!card) return
+      const exists = card.prices.find(p => p.rarity === rarity)
+      const newPrices = exists
+        ? card.prices.map(p => p.rarity === rarity ? { ...p, price } : p)
+        : [...card.prices, { rarity: rarity as CardPrice['rarity'], price }]
+      updateMutation.mutate({ cardId, updates: { prices: newPrices } })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateMutation]
+  )
+
+  const setCardStopped = useCallback(
+    (cardId: string, stopped: boolean) => {
+      const card = getCard(cardId)
+      if (!card) return
+      if (stopped) {
+        const disabledRarities = Object.fromEntries(
+          Object.keys(card.enabledRarities).map(r => [r, false])
+        )
+        updateMutation.mutate({ cardId, updates: { isStopped: true, enabledRarities: disabledRarities } })
+      } else {
+        const enabledRarities = Object.fromEntries(card.prices.map(p => [p.rarity, true]))
+        updateMutation.mutate({ cardId, updates: { isStopped: false, enabledRarities } })
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateMutation]
+  )
+
   return {
     cards,
-    updateCard: useCallback(updateCard, []),
-    updateCardImage: useCallback(updateCardImage, []),
-    updateCardName: useCallback(updateCardName, []),
-    toggleRarity: useCallback(toggleRarity, []),
-    updateRarityPrice: useCallback(updateRarityPrice, []),
-    addCard: useCallback(addCard, []),
-    deleteCard: useCallback(deleteCard, []),
-    setCardStopped: useCallback(setCardStopped, []),
+    updateCard,
+    updateCardImage,
+    updateCardName,
+    toggleRarity,
+    updateRarityPrice,
+    addCard: useCallback((card: Omit<CardWithStatus, 'id'>) => addMutation.mutate(card), [addMutation]),
+    deleteCard: useCallback((cardId: string) => deleteMutation.mutate(cardId), [deleteMutation]),
+    setCardStopped,
   }
 }
 
-// --- Tabs Store ---
-type TabsStore = {
-  tabs: string[]
-  listeners: Set<() => void>
-}
-
-const tabsStore: TabsStore = {
-  tabs: loadFromStorage<string[]>(TABS_KEY, ['블레이징 도미니언', '버스트 프로토콜']),
-  listeners: new Set(),
-}
-
-function emitTabsChange() {
-  saveToStorage(TABS_KEY, tabsStore.tabs)
-  tabsStore.listeners.forEach(l => l())
-}
-
-function subscribeTabs(listener: () => void) {
-  tabsStore.listeners.add(listener)
-  return () => tabsStore.listeners.delete(listener)
-}
-
-function getTabsSnapshot(): string[] {
-  return tabsStore.tabs
-}
-
-function addTab(name: string) {
-  const trimmed = name.trim()
-  if (!trimmed || tabsStore.tabs.includes(trimmed)) return
-  tabsStore.tabs = [...tabsStore.tabs, trimmed]
-  emitTabsChange()
-}
-
-function removeTab(name: string) {
-  tabsStore.tabs = tabsStore.tabs.filter(t => t !== name)
-  emitTabsChange()
-}
+// --- useTabs ---
 
 export function useTabs() {
-  const tabs = useSyncExternalStore(subscribeTabs, getTabsSnapshot, getTabsSnapshot)
+  const queryClient = useQueryClient()
+
+  const { data: tabs = [] } = useQuery({
+    queryKey: TABS_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tabs')
+        .select('name')
+        .order('sort_order', { ascending: true })
+      if (error) throw error
+      return (data as { name: string }[]).map(r => r.name)
+    },
+  })
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: TABS_KEY }),
+    [queryClient]
+  )
+
+  const addMutation = useMutation({
+    mutationFn: async (name: string) => {
+      if (tabs.includes(name)) return
+      const { error } = await supabase
+        .from('tabs')
+        .insert({ name, sort_order: tabs.length })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+    onError: (e) => console.error('[addTab]', e),
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase.from('tabs').delete().eq('name', name)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+    onError: (e) => console.error('[removeTab]', e),
+  })
+
   return {
     tabs,
-    addTab: useCallback(addTab, []),
-    removeTab: useCallback(removeTab, []),
+    // mutateAsync: 에러를 호출부까지 전파해 UI에서 처리 가능
+    addTab: useCallback((name: string) => addMutation.mutateAsync(name), [addMutation]),
+    removeTab: useCallback((name: string) => removeMutation.mutate(name), [removeMutation]),
+    isAddingTab: addMutation.isPending,
+    addTabError: addMutation.error,
   }
 }

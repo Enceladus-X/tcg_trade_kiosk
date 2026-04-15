@@ -3,12 +3,22 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { Settings, Search, X, Power } from 'lucide-react'
-import { searchCards, type CardWithStatus } from '@/lib/mock-cards'
+import { searchCards, type CardWithStatus, type CardPrice, rarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 
 interface FullWidthGridProps {
   onCardClick: (card: CardWithStatus) => void
   onGlobalAdminClick: () => void
+}
+
+function getActivePrices(card: CardWithStatus): CardPrice[] {
+  return card.prices.filter(
+    (p) => p.price > 0 && card.enabledRarities[p.rarity] !== false
+  )
+}
+
+function formatPrice(price: number): string {
+  return price.toLocaleString('ko-KR')
 }
 
 export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGridProps) {
@@ -29,7 +39,13 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
 
   const filteredCards = useMemo(() => {
     const byTab = cards.filter(c => c.category === activeTab)
-    return searchCards(byTab, searchQuery)
+    const searched = searchCards(byTab, searchQuery)
+    // 각 카드의 활성 매입가 중 최고가 기준 내림차순 정렬
+    return [...searched].sort((a, b) => {
+      const maxPrice = (card: CardWithStatus) =>
+        getActivePrices(card).reduce((max, p) => Math.max(max, p.price), 0)
+      return maxPrice(b) - maxPrice(a)
+    })
   }, [cards, activeTab, searchQuery])
 
   return (
@@ -48,7 +64,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
       <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           {searchOpen ? (
-            /* 검색 모드 */
             <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
               <Search className="h-4 w-4 shrink-0 text-zinc-500" />
               <input
@@ -66,7 +81,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
               )}
             </div>
           ) : (
-            /* 탭 모드 */
             <div
               className="flex flex-1 gap-1 overflow-x-auto"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
@@ -87,7 +101,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             </div>
           )}
 
-          {/* 검색 토글 */}
           <button
             onClick={() => setSearchOpen(v => !v)}
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
@@ -99,7 +112,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
           </button>
 
-          {/* 관리자 설정 */}
           <button
             onClick={onGlobalAdminClick}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
@@ -107,7 +119,6 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             <Settings className="h-5 w-5" />
           </button>
 
-          {/* 앱 종료 - Electron 환경에서만 표시 */}
           {isElectron && (
             <button
               onClick={() => window.close()}
@@ -120,45 +131,119 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
         </div>
       </div>
 
-      {/* Card Grid */}
-      <div className="flex-1 overflow-auto px-4 pb-2 pt-2">
-        <div className="grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
+      {/* Card Grid
+          items-start: 타일 높이가 제각각일 때 행 높이에 맞춰 억지로 늘어나지 않도록.
+          가격 영역이 생기면서 타일 총 높이가 커지므로 xl 기준 7→6열로 조정.
+      */}
+      <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
           {filteredCards.map((card) => (
-            <button
-              key={card.id}
-              onClick={() => onCardClick(card)}
-              className="group relative aspect-[3/4] overflow-hidden rounded-xl bg-zinc-900 transition-all hover:ring-2 hover:ring-amber-500 active:scale-95"
-            >
-              <Image
-                src={card.imageUrl}
-                alt={card.name}
-                fill
-                className={`object-contain transition-opacity ${
-                  card.isStopped ? 'grayscale brightness-50' : ''
-                }`}
-                sizes="(max-width: 640px) 25vw, (max-width: 768px) 20vw, (max-width: 1024px) 16.67vw, 10vw"
-              />
-              {card.isStopped && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="rounded-lg bg-red-600 px-2 py-1 text-xs font-bold text-white shadow-lg">
-                    매입 중지
-                  </span>
-                </div>
-              )}
-              {!card.isStopped && (
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              )}
-            </button>
+            <CardTile key={card.id} card={card} onClick={() => onCardClick(card)} />
           ))}
         </div>
 
         {filteredCards.length === 0 && (
           <div className="flex h-64 items-center justify-center">
             <p className="text-zinc-500">
-              {searchQuery ? `"${searchQuery}" 검색 결과 없음` : tabs.length === 0 ? '탭을 먼저 생성하세요' : '카드가 없습니다'}
+              {searchQuery
+                ? `"${searchQuery}" 검색 결과 없음`
+                : tabs.length === 0
+                ? '탭을 먼저 생성하세요'
+                : '카드가 없습니다'}
             </p>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void }) {
+  const activePrices = getActivePrices(card)
+
+  return (
+    <button
+      onClick={onClick}
+      className="group relative overflow-hidden rounded-xl bg-zinc-900 transition-all active:scale-95 hover:ring-2 hover:ring-amber-500"
+      style={{ aspectRatio: '3 / 4' }}
+    >
+      <Image
+        src={card.imageUrl}
+        alt={card.name}
+        fill
+        className={`object-contain transition-opacity ${
+          card.isStopped ? 'brightness-40 grayscale' : ''
+        }`}
+        sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (max-width: 1280px) 20vw, 16.67vw"
+      />
+
+      {card.isStopped && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="rounded-lg bg-red-600 px-2 py-1 text-xs font-bold text-white shadow-lg">
+            매입 중지
+          </span>
+        </div>
+      )}
+
+      {!card.isStopped && activePrices.length > 0 && (
+        <PriceOverlay prices={activePrices} />
+      )}
+    </button>
+  )
+}
+
+// 레어도별 뱃지 색상 — inline style로 동적 클래스 purge 문제 회피
+const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
+  N:   { bg: 'rgba(82,82,91,0.95)',    color: '#e4e4e7' },
+  R:   { bg: 'rgba(37,99,235,0.95)',   color: '#fff'    },
+  SR:  { bg: 'rgba(217,119,6,0.95)',   color: '#000'    },
+  UR:  { bg: 'rgba(225,29,72,0.95)',   color: '#fff'    },
+  UL:  { bg: 'rgba(147,51,234,0.95)', color: '#fff'    },
+  SE:  { bg: 'rgba(5,150,105,0.95)',   color: '#fff'    },
+  PSR: { bg: 'rgba(14,165,233,0.95)',  color: '#000'    },
+}
+
+// 레어도별 가격 텍스트 색상
+const RARITY_PRICE_COLOR: Record<string, string> = {
+  N:   '#a1a1aa',
+  R:   '#93c5fd',
+  SR:  '#fcd34d',
+  UR:  '#fda4af',
+  UL:  '#d8b4fe',
+  SE:  '#6ee7b7',
+  PSR: '#7dd3fc',
+}
+
+function PriceOverlay({ prices }: { prices: CardPrice[] }) {
+  const sorted = [...prices].sort((a, b) => b.price - a.price)
+
+  return (
+    // 우측 하단에만 붙임 — 카드 좌측 아트워크 영역 침범 최소화
+    <div
+      className="absolute bottom-0 right-0 rounded-tl-lg px-3 py-2 backdrop-blur-sm"
+      style={{ background: 'rgba(0,0,0,0.72)' }}
+    >
+      <div className="flex flex-col items-end gap-1">
+        {sorted.map((p) => {
+          const badge      = RARITY_BADGE[p.rarity]      ?? RARITY_BADGE['N']
+          const priceColor = RARITY_PRICE_COLOR[p.rarity] ?? '#fff'
+          return (
+            <div key={p.rarity} className="flex items-center gap-1.5">
+              <span
+                className="shrink-0 rounded px-2 py-1 text-sm font-black leading-none"
+                style={{ background: badge.bg, color: badge.color }}
+              >
+                {p.rarity}
+              </span>
+              <span
+                className="text-3xl font-black leading-none tracking-tight drop-shadow-[0_1px_6px_rgba(0,0,0,1)]"
+                style={{ color: priceColor }}
+              >
+                {formatPrice(p.price)}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

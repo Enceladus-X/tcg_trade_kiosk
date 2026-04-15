@@ -1,72 +1,124 @@
 'use client'
 
-import { useCallback, useSyncExternalStore } from 'react'
-import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus, mockPendingOrders } from './mock-cards'
+import { useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { supabase } from './supabase'
+import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus } from './mock-cards'
+import { type DbOrder } from './database.types'
 
-// External store for pending orders - designed for easy backend migration
-type OrdersStore = {
-  orders: PendingOrder[]
-  listeners: Set<() => void>
-}
+// --- 타입 변환 ---
 
-const ordersStore: OrdersStore = {
-  orders: [...mockPendingOrders], // Initialize with mock data
-  listeners: new Set(),
-}
-
-function emitChange() {
-  ordersStore.listeners.forEach(listener => listener())
-}
-
-function subscribe(listener: () => void) {
-  ordersStore.listeners.add(listener)
-  return () => ordersStore.listeners.delete(listener)
-}
-
-function getSnapshot(): PendingOrder[] {
-  return ordersStore.orders
-}
-
-// Create a new order from cart items and customer data
-function createOrder(items: CartItem[], customerData: CheckoutFormData): PendingOrder {
-  const newOrder: PendingOrder = {
-    id: `order-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    customerName: customerData.name,
-    bankName: customerData.bankName,
-    accountNumber: customerData.accountNumber,
-    phoneLast4: customerData.phoneLast4,
-    items: [...items],
-    totalPrice: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    status: 'pending',
+function dbToOrder(row: DbOrder): PendingOrder {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    customerName: row.customer_name,
+    bankName: row.bank_name,
+    accountNumber: row.account_number,
+    phoneLast4: row.phone_last4,
+    totalPrice: row.total_price,
+    status: row.status,
+    items: (row.order_items ?? []).map(item => ({
+      cardId: item.card_id ?? '',
+      cardName: item.card_name,
+      cardCode: item.card_code,
+      rarity: item.rarity,
+      price: item.price,
+      quantity: item.quantity,
+    })),
   }
-  
-  ordersStore.orders = [newOrder, ...ordersStore.orders]
-  emitChange()
-  return newOrder
 }
 
-// Update order status (admin action)
-function updateOrderStatus(orderId: string, status: OrderStatus) {
-  ordersStore.orders = ordersStore.orders.map(order =>
-    order.id === orderId ? { ...order, status } : order
-  )
-  emitChange()
-}
+const ORDERS_KEY = ['orders'] as const
 
-// Delete order (admin action)
-function deleteOrder(orderId: string) {
-  ordersStore.orders = ordersStore.orders.filter(order => order.id !== orderId)
-  emitChange()
-}
+// --- useOrders ---
 
-// Hook to use orders state
 export function useOrders() {
-  const orders = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const queryClient = useQueryClient()
 
-  const pendingOrders = orders.filter(o => o.status === 'pending')
+  const { data: orders = [] } = useQuery({
+    queryKey: ORDERS_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data as DbOrder[]).map(dbToOrder)
+    },
+  })
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
+    [queryClient]
+  )
+
+  const createMutation = useMutation({
+    mutationFn: async ({
+      items,
+      customerData,
+    }: {
+      items: CartItem[]
+      customerData: CheckoutFormData
+    }) => {
+      // 1단계: orders 행 삽입
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          customer_name: customerData.name,
+          bank_name: customerData.bankName,
+          account_number: customerData.accountNumber,
+          phone_last4: customerData.phoneLast4,
+          total_price: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+          status: 'pending',
+        })
+        .select()
+        .single()
+      if (orderError) throw orderError
+
+      // 2단계: order_items 일괄 삽입
+      // card_name/card_code는 스냅샷 — 카드 삭제 후에도 주문 기록 보존
+      const { error: itemsError } = await supabase.from('order_items').insert(
+        items.map(item => ({
+          order_id: order.id,
+          card_id: item.cardId || null,
+          card_name: item.cardName,
+          card_code: item.cardCode,
+          rarity: item.rarity,
+          price: item.price,
+          quantity: item.quantity,
+        }))
+      )
+      if (itemsError) throw itemsError
+
+      return order
+    },
+    onSuccess: invalidate,
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status })
+        .eq('id', orderId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      // order_items는 ON DELETE CASCADE로 자동 삭제
+      const { error } = await supabase.from('orders').delete().eq('id', orderId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const pendingOrders  = orders.filter(o => o.status === 'pending')
   const approvedOrders = orders.filter(o => o.status === 'approved')
-  const paidOrders = orders.filter(o => o.status === 'paid')
+  const paidOrders     = orders.filter(o => o.status === 'paid')
 
   return {
     orders,
@@ -74,8 +126,19 @@ export function useOrders() {
     approvedOrders,
     paidOrders,
     pendingCount: pendingOrders.length,
-    createOrder: useCallback(createOrder, []),
-    updateOrderStatus: useCallback(updateOrderStatus, []),
-    deleteOrder: useCallback(deleteOrder, []),
+    createOrder: useCallback(
+      (items: CartItem[], customerData: CheckoutFormData) =>
+        createMutation.mutateAsync({ items, customerData }),
+      [createMutation]
+    ),
+    updateOrderStatus: useCallback(
+      (orderId: string, status: OrderStatus) =>
+        updateStatusMutation.mutate({ orderId, status }),
+      [updateStatusMutation]
+    ),
+    deleteOrder: useCallback(
+      (orderId: string) => deleteMutation.mutate(orderId),
+      [deleteMutation]
+    ),
   }
 }

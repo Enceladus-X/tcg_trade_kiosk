@@ -6,6 +6,7 @@ import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { formatPrice, rarityColors, type OrderStatus } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
+import { ImageUploadField } from '@/components/image-upload-field'
 
 interface GlobalAdminModalProps {
   onClose: () => void
@@ -26,7 +27,7 @@ type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs'
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
-  const { tabs, addTab, removeTab } = useTabs()
+  const { tabs, addTab, removeTab, isAddingTab, addTabError } = useTabs()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
@@ -258,16 +259,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-400">이미지 URL (선택)</label>
-                  <input
-                    type="text"
-                    value={newCardImageUrl}
-                    onChange={(e) => setNewCardImageUrl(e.target.value)}
-                    placeholder="/cards/BLZD-KR001.png 또는 외부 URL"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
-                  />
-                </div>
+                <ImageUploadField
+                  currentUrl={newCardImageUrl}
+                  onUpload={(url) => setNewCardImageUrl(url)}
+                  showPreview={!!newCardImageUrl}
+                />
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">레어도별 매입가</label>
@@ -378,28 +374,43 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     type="text"
                     value={newTabName}
                     onChange={(e) => setNewTabName(e.target.value)}
-                    onKeyDown={(e) => {
+                    onKeyDown={async (e) => {
                       if (e.key === 'Enter' && newTabName.trim()) {
-                        addTab(newTabName.trim())
-                        setNewTabName('')
+                        try {
+                          await addTab(newTabName.trim())
+                          setNewTabName('')
+                        } catch (err) {
+                          console.error('[탭 추가 실패]', err)
+                        }
                       }
                     }}
                     placeholder="새 확장팩명 (예: 버스트 오브 데스티니)"
                     className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
                   />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (newTabName.trim()) {
-                        addTab(newTabName.trim())
-                        setNewTabName('')
+                        try {
+                          await addTab(newTabName.trim())
+                          setNewTabName('')
+                        } catch (err) {
+                          console.error('[탭 추가 실패]', err)
+                        }
                       }
                     }}
-                    disabled={!newTabName.trim()}
+                    disabled={!newTabName.trim() || isAddingTab}
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
                   >
                     <Plus className="h-5 w-5" />
                   </button>
                 </div>
+
+                {/* Supabase 연결 오류 표시 */}
+                {addTabError && (
+                  <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-400">
+                    오류: {(addTabError as Error).message}
+                  </p>
+                )}
 
                 <div className="space-y-2">
                   {tabs.length === 0 && (

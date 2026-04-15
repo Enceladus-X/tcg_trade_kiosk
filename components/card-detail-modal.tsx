@@ -8,6 +8,7 @@ import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
 import { PinAuthOverlay } from './pin-auth-overlay'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
+import { ImageUploadField } from '@/components/image-upload-field'
 
 interface CardDetailModalProps {
   card: CardWithStatus
@@ -222,15 +223,11 @@ export function CardDetailModal({ card, onClose }: CardDetailModalProps) {
                   </div>
                   
                   {/* Image URL */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-400">이미지 URL</label>
-                    <input
-                      type="text"
-                      value={editImageUrl}
-                      onChange={(e) => setEditImageUrl(e.target.value)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-zinc-600 focus:outline-none"
-                    />
-                  </div>
+                  <ImageUploadField
+                    currentUrl={editImageUrl}
+                    onUpload={(url) => setEditImageUrl(url)}
+                    showPreview={false}
+                  />
                   
                   {/* Rarity Prices */}
                   <div className="space-y-2">
