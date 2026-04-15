@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Settings, Search, X, Power } from 'lucide-react'
 import { searchCards, type CardWithStatus, type CardPrice, rarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
+import { useStoreSettings } from '@/lib/use-settings'
 
 interface FullWidthGridProps {
   onCardClick: (card: CardWithStatus) => void
@@ -24,7 +25,9 @@ function formatPrice(price: number): string {
 export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGridProps) {
   const { cards } = useCards()
   const { tabs } = useTabs()
+  const { globalRarities } = useStoreSettings()
   const [selectedTab, setSelectedTab] = useState<string>(() => tabs[0] ?? '')
+  const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -37,16 +40,27 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
     else setSearchQuery('')
   }, [searchOpen])
 
+  // 탭 전환 시 레어도 필터 초기화
+  useEffect(() => {
+    setSelectedRarity(null)
+  }, [activeTab])
+
   const filteredCards = useMemo(() => {
     const byTab = cards.filter(c => c.category === activeTab)
     const searched = searchCards(byTab, searchQuery)
+    const byRarity = selectedRarity
+      ? searched.filter(card =>
+          card.enabledRarities[selectedRarity] &&
+          card.prices.some(p => p.rarity === selectedRarity && p.price > 0)
+        )
+      : searched
     // 각 카드의 활성 매입가 중 최고가 기준 내림차순 정렬
-    return [...searched].sort((a, b) => {
+    return [...byRarity].sort((a, b) => {
       const maxPrice = (card: CardWithStatus) =>
         getActivePrices(card).reduce((max, p) => Math.max(max, p.price), 0)
       return maxPrice(b) - maxPrice(a)
     })
-  }, [cards, activeTab, searchQuery])
+  }, [cards, activeTab, searchQuery, selectedRarity])
 
   return (
     <div className="flex h-full flex-col">
@@ -130,6 +144,42 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
           )}
         </div>
       </div>
+
+      {/* 레어도 필터 바 */}
+      {globalRarities.length > 0 && (
+        <div
+          className="shrink-0 flex items-center gap-2 overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-4 py-2"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+        >
+          <button
+            onClick={() => setSelectedRarity(null)}
+            className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              selectedRarity === null
+                ? 'bg-amber-500 text-black'
+                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+            }`}
+          >
+            전체
+          </button>
+          {globalRarities.map(rarity => {
+            const colors = rarityColors[rarity]
+            const isSelected = selectedRarity === rarity
+            return (
+              <button
+                key={rarity}
+                onClick={() => setSelectedRarity(isSelected ? null : rarity)}
+                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
+                  isSelected
+                    ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                }`}
+              >
+                {rarity}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Card Grid
           items-start: 타일 높이가 제각각일 때 행 높이에 맞춰 억지로 늘어나지 않도록.

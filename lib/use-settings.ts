@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: Omit<DbStoreSettings, 'id' | 'updated_at'> = {
 export function useStoreSettings() {
   const queryClient = useQueryClient()
 
-  const { data: settings } = useQuery({
+  const { data: settings, isLoading, isError } = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -43,6 +43,8 @@ export function useStoreSettings() {
 
   return {
     settings,
+    isLoading,
+    isError,
     mileageRate: settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate,
     adminPassword: settings?.admin_password ?? DEFAULT_SETTINGS.admin_password,
     globalRarities: settings?.global_rarities ?? DEFAULT_SETTINGS.global_rarities,
