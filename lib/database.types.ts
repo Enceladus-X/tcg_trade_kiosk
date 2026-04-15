@@ -15,10 +15,18 @@ export type DbCard = {
   created_at: string
 }
 
+export type DbGame = {
+  id: string
+  name: string
+  sort_order: number
+  created_at: string
+}
+
 export type DbTab = {
   id: string
   name: string
   sort_order: number
+  game_id: string | null
 }
 
 export type DbOrder = {

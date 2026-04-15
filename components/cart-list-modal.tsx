@@ -32,10 +32,11 @@ export function CartListModal({ onClose }: CartListModalProps) {
 
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof typeof formData, string>> = {}
+    const isMileage = paymentMethod === 'mileage'
 
     if (!formData.name.trim()) newErrors.name = '이름을 입력해주세요'
-    if (!formData.bankName.trim()) newErrors.bankName = '은행명을 입력해주세요'
-    if (!formData.accountNumber.trim()) newErrors.accountNumber = '계좌번호를 입력해주세요'
+    if (!isMileage && !formData.bankName.trim()) newErrors.bankName = '은행명을 입력해주세요'
+    if (!isMileage && !formData.accountNumber.trim()) newErrors.accountNumber = '계좌번호를 입력해주세요'
     if (!formData.phoneNumber.trim()) {
       newErrors.phoneNumber = '전화번호를 입력해주세요'
     } else if (!/^\d{10,11}$/.test(formData.phoneNumber.replace(/-/g, ''))) {
@@ -151,35 +152,39 @@ export function CartListModal({ onClose }: CartListModalProps) {
                   {errors.name && <p className="text-sm text-red-400">{errors.name}</p>}
                 </div>
 
-                {/* Bank Name */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-400">은행명</label>
-                  <input
-                    type="text"
-                    value={formData.bankName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                    placeholder="예: 카카오뱅크"
-                    className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
-                      errors.bankName ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
-                    }`}
-                  />
-                  {errors.bankName && <p className="text-sm text-red-400">{errors.bankName}</p>}
-                </div>
+                {/* Bank Name - 현금 결제만 표시 */}
+                {paymentMethod === 'cash' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-zinc-400">은행명</label>
+                    <input
+                      type="text"
+                      value={formData.bankName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
+                      placeholder="예: 카카오뱅크"
+                      className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
+                        errors.bankName ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                      }`}
+                    />
+                    {errors.bankName && <p className="text-sm text-red-400">{errors.bankName}</p>}
+                  </div>
+                )}
 
-                {/* Account Number */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-400">계좌번호</label>
-                  <input
-                    type="text"
-                    value={formData.accountNumber}
-                    onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                    placeholder="예: 3333-01-1234567"
-                    className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
-                      errors.accountNumber ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
-                    }`}
-                  />
-                  {errors.accountNumber && <p className="text-sm text-red-400">{errors.accountNumber}</p>}
-                </div>
+                {/* Account Number - 현금 결제만 표시 */}
+                {paymentMethod === 'cash' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-zinc-400">계좌번호</label>
+                    <input
+                      type="text"
+                      value={formData.accountNumber}
+                      onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                      placeholder="예: 3333-01-1234567"
+                      className={`w-full rounded-xl border bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none ${
+                        errors.accountNumber ? 'border-red-500' : 'border-zinc-700 focus:border-zinc-600'
+                      }`}
+                    />
+                    {errors.accountNumber && <p className="text-sm text-red-400">{errors.accountNumber}</p>}
+                  </div>
+                )}
 
                 {/* Phone Number (full) */}
                 <div className="space-y-2">

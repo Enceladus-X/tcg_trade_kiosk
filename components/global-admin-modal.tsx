@@ -29,15 +29,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
   const { tabs, addTab, removeTab, isAddingTab, addTabError } = useTabs()
-  const { mileageRate, globalRarities, updateSettings, isUpdating } = useStoreSettings()
+  const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, isUpdating } = useStoreSettings()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
 
   // 설정 탭 로컬 상태
-  const [editMileageRate, setEditMileageRate] = useState<string>('')
-  const [editRarities, setEditRarities] = useState<string[]>([])
+  const [editMileagePercent, setEditMileagePercent] = useState<string>('')
+  const [newRarityInput, setNewRarityInput] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
@@ -400,84 +400,114 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {/* ── 설정 ── */}
           {activeTab === 'settings' && (
             <div className="p-6">
-              <div className="mx-auto max-w-lg space-y-6">
+              <div className="mx-auto max-w-lg space-y-8">
 
-                {/* 마일리지 비율 */}
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-                    <Coins className="h-4 w-4" />
-                    마일리지 지급 비율
+                {/* 마일리지 지급 비율 (% 표기) */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <Coins className="h-4 w-4 text-emerald-400" />
+                    마일리지 지급 추가율
                   </label>
                   <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      step="0.05"
-                      min="1"
-                      max="3"
-                      defaultValue={mileageRate}
-                      onChange={(e) => setEditMileageRate(e.target.value)}
-                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-amber-500 focus:outline-none"
-                    />
-                    <span className="shrink-0 text-sm text-zinc-400">배수</span>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="200"
+                        step="5"
+                        placeholder={String(mileagePercent)}
+                        value={editMileagePercent}
+                        onChange={(e) => setEditMileagePercent(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 pl-4 pr-10 text-right text-xl font-bold text-white focus:border-emerald-500 focus:outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg font-bold text-zinc-400">%</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const val = editMileagePercent !== '' ? Number(editMileagePercent) : mileagePercent
+                        await setMileagePercent(val)
+                        setEditMileagePercent('')
+                        setSettingsSaved(true)
+                        setTimeout(() => setSettingsSaved(false), 2000)
+                      }}
+                      disabled={isUpdating || editMileagePercent === ''}
+                      className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white transition-all hover:bg-emerald-500 disabled:opacity-40"
+                    >
+                      {settingsSaved ? <Check className="h-4 w-4" /> : '적용'}
+                    </button>
                   </div>
-                  <p className="text-xs text-zinc-600">
-                    현재: x{mileageRate.toFixed(2)} — 매입가의 {((mileageRate - 1) * 100).toFixed(0)}% 추가 지급
+                  <p className="text-xs text-zinc-500">
+                    현재: <span className="font-bold text-emerald-400">+{mileagePercent}%</span>
+                    &nbsp;— 매입가 10,000원 → 마일리지 {(10000 * (1 + mileagePercent / 100)).toLocaleString('ko-KR')}원
                   </p>
                 </div>
 
-                {/* 활성 레어도 */}
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-                    <Settings2 className="h-4 w-4" />
-                    전역 활성 레어도
+                <div className="border-t border-zinc-800" />
+
+                {/* 동적 레어도 관리 */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <Settings2 className="h-4 w-4 text-amber-400" />
+                    활성 레어도 관리
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {ALL_RARITIES.map(rarity => {
-                      const isActive = (editRarities.length > 0 ? editRarities : globalRarities).includes(rarity)
-                      const colors = rarityColors[rarity]
-                      return (
-                        <button
-                          key={rarity}
-                          type="button"
-                          onClick={() => {
-                            const current = editRarities.length > 0 ? editRarities : [...globalRarities]
-                            setEditRarities(
-                              isActive ? current.filter(r => r !== rarity) : [...current, rarity]
-                            )
-                          }}
-                          className={`rounded-lg px-3 py-1.5 text-sm font-bold transition-all active:scale-95 ${
-                            isActive
-                              ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
-                              : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
-                          }`}
-                        >
-                          {rarity}
-                        </button>
-                      )
-                    })}
+
+                  {/* 현재 레어도 목록 */}
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-3">
+                    {globalRarities.length === 0 ? (
+                      <p className="py-2 text-center text-sm text-zinc-500">등록된 레어도 없음</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {globalRarities.map(rarity => {
+                          const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
+                          return (
+                            <div key={rarity} className={`flex items-center gap-1 rounded-lg pl-2.5 pr-1 py-1 ${colors.bg}`}>
+                              <span className={`text-sm font-black ${colors.text}`}>{rarity}</span>
+                              <button
+                                onClick={() => removeRarity(rarity)}
+                                disabled={isUpdating}
+                                className={`flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-black/30 disabled:opacity-40 ${colors.text}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-zinc-600">키오스크 필터 및 카드 추가 시 표시되는 레어도를 제어합니다</p>
+
+                  {/* 새 레어도 추가 */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newRarityInput}
+                      onChange={(e) => setNewRarityInput(e.target.value.toUpperCase().slice(0, 5))}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && newRarityInput.trim()) {
+                          await addRarity(newRarityInput)
+                          setNewRarityInput('')
+                        }
+                      }}
+                      placeholder="새 레어도 (예: GR)"
+                      maxLength={5}
+                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-bold uppercase text-white placeholder:font-normal placeholder:normal-case placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newRarityInput.trim()) return
+                        await addRarity(newRarityInput)
+                        setNewRarityInput('')
+                      }}
+                      disabled={isUpdating || !newRarityInput.trim() || globalRarities.includes(newRarityInput.trim())}
+                      className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-4 text-sm font-semibold text-black transition-all hover:bg-amber-400 disabled:opacity-40"
+                    >
+                      <Plus className="h-4 w-4" />
+                      추가
+                    </button>
+                  </div>
+                  <p className="text-xs text-zinc-600">최대 5자. 키오스크 필터와 카드 편집 화면에 즉시 반영됩니다.</p>
                 </div>
 
-                {/* 저장 */}
-                <button
-                  onClick={async () => {
-                    const rate = editMileageRate ? parseFloat(editMileageRate) : mileageRate
-                    const rarities = editRarities.length > 0 ? editRarities : globalRarities
-                    await updateSettings({ mileage_rate: rate, global_rarities: rarities })
-                    setEditMileageRate('')
-                    setEditRarities([])
-                    setSettingsSaved(true)
-                    setTimeout(() => setSettingsSaved(false), 2000)
-                  }}
-                  disabled={isUpdating}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 font-semibold text-black transition-all hover:bg-amber-400 disabled:opacity-50"
-                >
-                  {settingsSaved
-                    ? <><Check className="h-4 w-4" />저장 완료</>
-                    : isUpdating ? '저장 중...' : '설정 저장'
-                  }
-                </button>
               </div>
             </div>
           )}

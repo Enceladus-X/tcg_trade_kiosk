@@ -41,11 +41,19 @@ function RealtimeSubscriptions() {
       })
       .subscribe()
 
+    const gamesChannel = supabase
+      .channel('rt-games')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => {
+        qc.invalidateQueries({ queryKey: ['games'] })
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(cardsChannel)
       supabase.removeChannel(tabsChannel)
       supabase.removeChannel(ordersChannel)
       supabase.removeChannel(settingsChannel)
+      supabase.removeChannel(gamesChannel)
     }
   }, [qc])
 

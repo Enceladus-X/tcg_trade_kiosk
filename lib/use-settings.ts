@@ -13,6 +13,14 @@ const DEFAULT_SETTINGS: Omit<DbStoreSettings, 'id' | 'updated_at'> = {
   global_rarities: ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'],
 }
 
+// 배율 <-> % 변환 유틸
+export function rateToPercent(rate: number): number {
+  return Math.round((rate - 1) * 100)
+}
+export function percentToRate(percent: number): number {
+  return 1 + percent / 100
+}
+
 export function useStoreSettings() {
   const queryClient = useQueryClient()
 
@@ -41,18 +49,53 @@ export function useStoreSettings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SETTINGS_KEY }),
   })
 
+  const currentRarities = settings?.global_rarities ?? DEFAULT_SETTINGS.global_rarities
+
+  const updateSettings = useCallback(
+    (patch: Partial<Omit<DbStoreSettings, 'id' | 'updated_at'>>) =>
+      updateMutation.mutateAsync(patch),
+    [updateMutation]
+  )
+
+  const addRarity = useCallback(
+    (rarity: string) => {
+      const trimmed = rarity.trim().toUpperCase()
+      if (!trimmed || currentRarities.includes(trimmed)) return Promise.resolve()
+      return updateMutation.mutateAsync({
+        global_rarities: [...currentRarities, trimmed],
+      })
+    },
+    [updateMutation, currentRarities]
+  )
+
+  const removeRarity = useCallback(
+    (rarity: string) => {
+      return updateMutation.mutateAsync({
+        global_rarities: currentRarities.filter(r => r !== rarity),
+      })
+    },
+    [updateMutation, currentRarities]
+  )
+
+  const setMileagePercent = useCallback(
+    (percent: number) => {
+      return updateMutation.mutateAsync({ mileage_rate: percentToRate(percent) })
+    },
+    [updateMutation]
+  )
+
   return {
     settings,
     isLoading,
     isError,
     mileageRate: settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate,
+    mileagePercent: rateToPercent(settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate),
     adminPassword: settings?.admin_password ?? DEFAULT_SETTINGS.admin_password,
-    globalRarities: settings?.global_rarities ?? DEFAULT_SETTINGS.global_rarities,
-    updateSettings: useCallback(
-      (patch: Partial<Omit<DbStoreSettings, 'id' | 'updated_at'>>) =>
-        updateMutation.mutateAsync(patch),
-      [updateMutation]
-    ),
+    globalRarities: currentRarities,
+    updateSettings,
+    addRarity,
+    removeRarity,
+    setMileagePercent,
     isUpdating: updateMutation.isPending,
   }
 }

@@ -69,13 +69,18 @@ export function useOrders() {
       const isMileage = customerData.paymentMethod === 'mileage'
       const finalTotal = isMileage && mileageRate ? Math.round(baseTotal * mileageRate) : baseTotal
 
+      // 마일리지 결제는 은행/계좌 정보 불필요 → 빈 문자열로 저장
+      // (orders.bank_name / account_number 가 NOT NULL 이므로 '' 사용)
+      const bankName = isMileage ? '' : customerData.bankName
+      const accountNumber = isMileage ? '' : customerData.accountNumber
+
       // 1단계: orders 행 삽입
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           customer_name: customerData.name,
-          bank_name: customerData.bankName,
-          account_number: customerData.accountNumber,
+          bank_name: bankName,
+          account_number: accountNumber,
           phone_number: customerData.phoneNumber,
           total_price: finalTotal,
           status: 'pending',
