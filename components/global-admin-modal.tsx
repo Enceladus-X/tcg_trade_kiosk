@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
   Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
-  Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp,
+  Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
@@ -17,7 +17,6 @@ import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus } f
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
 
-// 게임 이미지 업로드 버튼
 function GameImageUploadButton({ game, onUpload }: { game: Game; onUpload: (url: string) => void }) {
   const { upload, isUploading } = useImageUpload({ bucket: 'game-images', prefix: 'games' })
   const inputRef = useRef<HTMLInputElement>(null)
@@ -82,9 +81,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
 
-  // 가격 조정 상태: Record<orderId, string[]> — 인덱스별 가격 문자열
+  // 가격 조정 상태
+  // adjustedPrices: 각 orderId별 아이템 인덱스 → 조정된 가격 문자열 (미저장 상태 포함)
   const [adjustedPrices, setAdjustedPrices] = useState<Record<string, string[]>>({})
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null)
+  // 이번 세션에서 가격이 저장된 orderId 목록
+  const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
+  // 현재 인라인 편집 중인 아이템
+  const [editingItem, setEditingItem] = useState<{ orderId: string; idx: number } | null>(null)
+  const [editingValue, setEditingValue] = useState('')  // 직접 입력 (원)
+  const [editingPct, setEditingPct] = useState('')      // % 감가 입력
 
   // 설정 탭 로컬 상태
   const [editMileagePercent, setEditMileagePercent] = useState<string>('')
@@ -95,7 +101,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
 
-  // 고객 정보 복사
+  // 통계 범위
+  const [statsRange, setStatsRange] = useState<'today' | 'all'>('today')
+
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
     const text = [order.customerName, order.bankName, order.accountNumber, order.phoneNumber]
       .filter(Boolean)
@@ -114,15 +122,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>({ ...emptyEnabled })
   const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>({ ...emptyPrices })
 
-  // 카드 관리 검색 + 수정 모달
   const [cardSearch, setCardSearch] = useState('')
   const [adminEditCard, setAdminEditCard] = useState<CardWithStatus | null>(null)
-
-  // 게임/탭 관리 입력
   const [newGameName, setNewGameName] = useState('')
   const [newTabName, setNewTabName] = useState('')
 
-  // 카드 추가 실행
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
     const prices = ALL_RARITIES
@@ -148,7 +152,52 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     setActiveTab('orders')
   }
 
-  // 가격 조정 저장
+  // 인라인 편집 열기
+  const openEditItem = (orderId: string, idx: number, originalPrice: number) => {
+    setEditingItem({ orderId, idx })
+    const current = adjustedPrices[orderId]?.[idx]
+    const price = current ? parseFloat(current) : originalPrice
+    setEditingValue(String(price))
+    setEditingPct('')
+  }
+
+  // 직접 입력 변경 → % 자동 계산
+  const handleDirectChange = (val: string, originalPrice: number) => {
+    setEditingValue(val)
+    const parsed = parseFloat(val)
+    if (!isNaN(parsed) && originalPrice > 0) {
+      const pct = Math.round((1 - parsed / originalPrice) * 100)
+      setEditingPct(pct > 0 ? String(pct) : '')
+    } else {
+      setEditingPct('')
+    }
+  }
+
+  // % 입력 변경 → 직접 가격 자동 계산
+  const handlePctChange = (val: string, originalPrice: number) => {
+    setEditingPct(val)
+    const pct = parseFloat(val)
+    if (!isNaN(pct) && pct >= 0 && pct < 100) {
+      setEditingValue(String(Math.round(originalPrice * (1 - pct / 100))))
+    }
+  }
+
+  // 편집 확인 — adjustedPrices에 반영 (아직 DB 저장 아님)
+  const confirmEditItem = (orderId: string, idx: number) => {
+    const price = parseFloat(editingValue)
+    if (isNaN(price) || price < 0) { setEditingItem(null); return }
+    setAdjustedPrices(prev => {
+      const base = prev[orderId] ?? []
+      const arr = [...base]
+      arr[idx] = String(price)
+      return { ...prev, [orderId]: arr }
+    })
+    setEditingItem(null)
+    setEditingValue('')
+    setEditingPct('')
+  }
+
+  // 가격 조정 DB 저장
   const handleSavePrices = async (order: (typeof orders)[number]) => {
     const priceArr = adjustedPrices[order.id]
     if (!priceArr) return
@@ -156,7 +205,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     try {
       const itemUpdates = order.items
         .map((item, idx) => ({ itemId: item.itemId!, price: parseFloat(priceArr[idx]) || item.price }))
-        .filter((u, idx) => String(u.price) !== String(order.items[idx].price))
+        .filter((u, idx) => u.price !== order.items[idx].price)
       const newBaseTotal = order.items.reduce((sum, item, idx) => {
         const p = parseFloat(priceArr[idx]) || item.price
         return sum + p * item.quantity
@@ -165,6 +214,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         ? Math.round(newBaseTotal * order.mileageRate)
         : newBaseTotal
       await updateItemPrices(order.id, itemUpdates, newTotal)
+      setAdjustedOrderIds(prev => new Set([...prev, order.id]))
     } finally {
       setSavingOrderId(null)
     }
@@ -179,14 +229,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   // 통계 계산
   const todayStr = new Date().toDateString()
-  const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
-  const todayTotal = todayOrders.reduce((sum, o) => sum + o.totalPrice, 0)
-  const todayPaidTotal = todayOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
-  const todayCashCount = todayOrders.filter(o => o.paymentMethod === 'cash').length
-  const todayMileageCount = todayOrders.filter(o => o.paymentMethod === 'mileage').length
+  const statsOrders = statsRange === 'today'
+    ? orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+    : orders
+  const statsTotal      = statsOrders.reduce((sum, o) => sum + o.totalPrice, 0)
+  const statsPaidTotal  = statsOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
+  const statsCashCount  = statsOrders.filter(o => o.paymentMethod === 'cash').length
+  const statsMileageCount = statsOrders.filter(o => o.paymentMethod === 'mileage').length
 
   const topCardsMap = new Map<string, { cardName: string; rarity: string; count: number; totalPrice: number }>()
-  for (const order of orders.filter(o => o.status !== 'rejected')) {
+  for (const order of statsOrders.filter(o => o.status !== 'rejected')) {
     for (const item of order.items) {
       const key = `${item.cardName}|${item.rarity}`
       const existing = topCardsMap.get(key)
@@ -221,7 +273,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         exit={{    opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
-
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between border-b border-zinc-800 px-6 py-4">
           <h2 className="text-xl font-bold text-white">관리자 대시보드</h2>
@@ -275,6 +326,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           return v !== undefined && v !== '' && parseFloat(v) !== item.price
                         })
                       : false
+                    const isAdjusted = adjustedOrderIds.has(order.id)
 
                     return (
                       <div key={order.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800/50">
@@ -284,6 +336,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           onClick={() => {
                             if (isExpanded) {
                               setExpandedOrder(null)
+                              setEditingItem(null)
                             } else {
                               setExpandedOrder(order.id)
                               setAdjustedPrices(prev => ({
@@ -297,6 +350,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               e.preventDefault()
                               if (isExpanded) {
                                 setExpandedOrder(null)
+                                setEditingItem(null)
                               } else {
                                 setExpandedOrder(order.id)
                                 setAdjustedPrices(prev => ({
@@ -313,11 +367,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               <User className="h-5 w-5 text-zinc-400" />
                             </div>
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-semibold text-white">{order.customerName}</span>
                                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}>
                                   {status.icon}{status.label}
                                 </span>
+                                {isAdjusted && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-medium text-orange-400">
+                                    <Scissors className="h-3 w-3" />가격조정됨
+                                  </span>
+                                )}
                               </div>
                               <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
                                 <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{order.bankName}</span>
@@ -353,68 +412,138 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         {isExpanded && (
                           <div className="border-t border-zinc-700 p-4">
                             <div className="mb-4 space-y-2">
-                              <p className="text-xs font-medium text-zinc-500">매입 품목 (가격 수정 가능)</p>
+                              <p className="text-xs font-medium text-zinc-500">매입 품목</p>
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
                                 const cardImg = item.cardId
                                   ? cards.find(c => c.id === item.cardId)?.imageUrl
                                   : undefined
-                                const currentVal = priceArr?.[idx] ?? String(item.price)
+                                const savedPrice = priceArr?.[idx]
+                                const displayPrice = savedPrice ? parseFloat(savedPrice) : item.price
+                                const isItemEditing = editingItem?.orderId === order.id && editingItem?.idx === idx
+                                const isPriceChanged = savedPrice !== undefined && parseFloat(savedPrice) !== item.price
+
                                 return (
-                                  <div key={idx} className="flex items-center gap-2 rounded-lg bg-zinc-900 p-2">
-                                    {/* 카드 썸네일 */}
-                                    <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
-                                      {cardImg ? (
-                                        <img
-                                          src={cardImg}
-                                          alt={item.cardName}
-                                          className="h-full w-full object-contain"
-                                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                                        />
-                                      ) : (
-                                        <div className="h-full w-full" />
-                                      )}
-                                    </div>
-                                    <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
-                                    <span className="min-w-0 flex-1 truncate text-sm text-white">{item.cardName}</span>
-                                    <span className="shrink-0 text-xs text-zinc-500">x{item.quantity}</span>
-                                    {/* 가격 수정 입력 */}
-                                    <div className="flex shrink-0 items-center gap-1">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="100"
-                                        value={currentVal}
-                                        onChange={(e) => setAdjustedPrices(prev => {
-                                          const arr = [...(prev[order.id] ?? order.items.map(i => String(i.price)))]
-                                          arr[idx] = e.target.value
-                                          return { ...prev, [order.id]: arr }
-                                        })}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={`w-24 rounded-lg border bg-zinc-800 px-2 py-1 text-right text-sm font-medium focus:outline-none ${
-                                          parseFloat(currentVal) !== item.price
-                                            ? 'border-amber-500 text-amber-400'
-                                            : 'border-zinc-700 text-zinc-300'
+                                  <div key={idx} className="rounded-lg bg-zinc-900">
+                                    {/* 아이템 행 */}
+                                    <div className="flex items-center gap-2 p-2">
+                                      <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
+                                        {cardImg ? (
+                                          <img
+                                            src={cardImg}
+                                            alt={item.cardName}
+                                            className="h-full w-full object-contain"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                          />
+                                        ) : (
+                                          <div className="h-full w-full" />
+                                        )}
+                                      </div>
+                                      <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
+                                      <span className="min-w-0 flex-1 truncate text-sm text-white">{item.cardName}</span>
+                                      <span className="shrink-0 text-xs text-zinc-500">x{item.quantity}</span>
+                                      {/* 가격 표시 */}
+                                      <div className="flex shrink-0 items-center gap-1.5">
+                                        {isPriceChanged && (
+                                          <span className="text-xs text-zinc-600 line-through">{formatPrice(item.price)}</span>
+                                        )}
+                                        <span className={`text-sm font-medium ${isPriceChanged ? 'text-orange-400' : 'text-zinc-300'}`}>
+                                          {formatPrice(displayPrice * item.quantity)}
+                                        </span>
+                                      </div>
+                                      {/* 수정 버튼 */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          if (isItemEditing) {
+                                            setEditingItem(null)
+                                          } else {
+                                            openEditItem(order.id, idx, item.price)
+                                          }
+                                        }}
+                                        className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                                          isItemEditing
+                                            ? 'bg-zinc-600 text-zinc-300'
+                                            : 'bg-zinc-700/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'
                                         }`}
-                                      />
-                                      <span className="text-xs text-zinc-600">원</span>
+                                      >
+                                        <Scissors className="h-3 w-3" />
+                                        {isItemEditing ? '닫기' : '수정'}
+                                      </button>
                                     </div>
+
+                                    {/* 인라인 편집 패널 */}
+                                    {isItemEditing && (
+                                      <div className="border-t border-zinc-800 px-2 pb-3 pt-2.5">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          {/* 직접 입력 */}
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs text-zinc-500 shrink-0">직접</span>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              step="100"
+                                              value={editingValue}
+                                              onChange={(e) => handleDirectChange(e.target.value, item.price)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-24 rounded-lg border border-orange-500/60 bg-zinc-800 px-2 py-1.5 text-right text-sm font-medium text-orange-300 focus:border-orange-400 focus:outline-none"
+                                            />
+                                            <span className="text-xs text-zinc-500 shrink-0">원</span>
+                                          </div>
+
+                                          <span className="text-zinc-700">/</span>
+
+                                          {/* % 감가 입력 */}
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs text-zinc-500 shrink-0">감가</span>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="99"
+                                              step="5"
+                                              value={editingPct}
+                                              placeholder="0"
+                                              onChange={(e) => handlePctChange(e.target.value, item.price)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-16 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-right text-sm font-medium text-zinc-300 focus:border-orange-400 focus:outline-none"
+                                            />
+                                            <span className="text-xs text-zinc-500 shrink-0">%</span>
+                                          </div>
+
+                                          {/* 확인/취소 */}
+                                          <div className="flex gap-1 ml-auto">
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); confirmEditItem(order.id, idx) }}
+                                              className="flex items-center gap-1 rounded-lg bg-orange-500/20 px-3 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/30"
+                                            >
+                                              <Check className="h-3 w-3" />확인
+                                            </button>
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setEditingItem(null) }}
+                                              className="flex items-center gap-1 rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:bg-zinc-600"
+                                            >
+                                              <X className="h-3 w-3" />취소
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               })}
                             </div>
 
-                            {/* 저장 버튼 */}
+                            {/* 가격 저장 버튼 */}
                             {pricesChanged && (
                               <div className="mb-3">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleSavePrices(order) }}
                                   disabled={savingOrderId === order.id}
-                                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500/20 py-2 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+                                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500/20 py-2 text-sm font-medium text-orange-400 transition-colors hover:bg-orange-500/30 disabled:opacity-50"
                                 >
                                   {savingOrderId === order.id
                                     ? <Loader2 className="h-4 w-4 animate-spin" />
-                                    : <Check className="h-4 w-4" />
+                                    : <Scissors className="h-4 w-4" />
                                   }
                                   조정 가격 저장
                                 </button>
@@ -601,7 +730,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-8">
 
-                {/* ---- 탭(확장팩) 관리 ---- */}
                 <div className="space-y-4">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Layers className="h-4 w-4 text-zinc-400" />
@@ -615,12 +743,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       onChange={(e) => setNewTabName(e.target.value)}
                       onKeyDown={async (e) => {
                         if (e.key === 'Enter' && newTabName.trim()) {
-                          try {
-                            await addTab(newTabName.trim())
-                            setNewTabName('')
-                          } catch (err) {
-                            console.error('[탭 추가 실패]', err)
-                          }
+                          try { await addTab(newTabName.trim()); setNewTabName('') }
+                          catch (err) { console.error('[탭 추가 실패]', err) }
                         }
                       }}
                       placeholder="새 확장팩명 (예: 버스트 오브 데스티니)"
@@ -629,12 +753,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     <button
                       onClick={async () => {
                         if (newTabName.trim()) {
-                          try {
-                            await addTab(newTabName.trim())
-                            setNewTabName('')
-                          } catch (err) {
-                            console.error('[탭 추가 실패]', err)
-                          }
+                          try { await addTab(newTabName.trim()); setNewTabName('') }
+                          catch (err) { console.error('[탭 추가 실패]', err) }
                         }
                       }}
                       disabled={!newTabName.trim() || isAddingTab}
@@ -655,16 +775,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       <p className="py-8 text-center text-sm text-zinc-500">등록된 탭이 없습니다</p>
                     )}
                     {tabs.map((tab) => (
-                      <div
-                        key={tab}
-                        className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3"
-                      >
+                      <div key={tab} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Layers className="h-4 w-4 text-zinc-500" />
                           <span className="font-medium text-white">{tab}</span>
-                          <span className="text-xs text-zinc-500">
-                            {cards.filter(c => c.category === tab).length}장
-                          </span>
+                          <span className="text-xs text-zinc-500">{cards.filter(c => c.category === tab).length}장</span>
                         </div>
                         <button
                           onClick={() => removeTab(tab)}
@@ -675,15 +790,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       </div>
                     ))}
                   </div>
-
-                  <p className="text-xs text-zinc-600">
-                    * 탭 삭제 시 해당 탭의 카드는 숨겨집니다. 탭을 다시 추가하면 복원됩니다.
-                  </p>
+                  <p className="text-xs text-zinc-600">* 탭 삭제 시 해당 탭의 카드는 숨겨집니다. 탭을 다시 추가하면 복원됩니다.</p>
                 </div>
 
                 <div className="border-t border-zinc-800" />
 
-                {/* ---- 게임 대분류 관리 ---- */}
                 <div className="space-y-4">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <TrendingUp className="h-4 w-4 text-zinc-400" />
@@ -697,8 +808,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       onChange={(e) => setNewGameName(e.target.value)}
                       onKeyDown={async (e) => {
                         if (e.key === 'Enter' && newGameName.trim()) {
-                          await addGame(newGameName.trim())
-                          setNewGameName('')
+                          await addGame(newGameName.trim()); setNewGameName('')
                         }
                       }}
                       placeholder="예: 유희왕, 포켓몬카드"
@@ -707,8 +817,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     <button
                       onClick={async () => {
                         if (!newGameName.trim()) return
-                        await addGame(newGameName.trim())
-                        setNewGameName('')
+                        await addGame(newGameName.trim()); setNewGameName('')
                       }}
                       disabled={isAddingGame || !newGameName.trim()}
                       className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
@@ -723,15 +832,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     <div className="space-y-2">
                       {games.map((game) => (
                         <div key={game.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
-                          <GameImageUploadButton
-                            game={game}
-                            onUpload={(url) => updateGameImage(game.id, url)}
-                          />
+                          <GameImageUploadButton game={game} onUpload={(url) => updateGameImage(game.id, url)} />
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white">{game.name}</p>
-                            <p className="text-xs text-zinc-500">
-                              {tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨
-                            </p>
+                            <p className="text-xs text-zinc-500">{tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨</p>
                           </div>
                           <button
                             onClick={() => removeGame(game.id)}
@@ -744,7 +848,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     </div>
                   )}
 
-                  {/* 탭-게임 배정 */}
                   {games.length > 0 && tabs.length > 0 && (
                     <>
                       <div className="border-t border-zinc-800" />
@@ -761,9 +864,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-amber-500 focus:outline-none"
                               >
                                 <option value="">미배정</option>
-                                {games.map(g => (
-                                  <option key={g.id} value={g.id}>{g.name}</option>
-                                ))}
+                                {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                               </select>
                             </div>
                           ))}
@@ -782,30 +883,57 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-6">
 
-                {/* 오늘 요약 */}
+                {/* 범위 토글 */}
+                <div className="flex rounded-xl border border-zinc-800 bg-zinc-800/50 p-1">
+                  <button
+                    onClick={() => setStatsRange('today')}
+                    className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                      statsRange === 'today'
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    오늘
+                  </button>
+                  <button
+                    onClick={() => setStatsRange('all')}
+                    className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                      statsRange === 'all'
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    전체
+                  </button>
+                </div>
+
+                {/* 요약 카드 */}
                 <div className="space-y-3">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <BarChart2 className="h-4 w-4 text-amber-400" />
-                    오늘 매입 현황
+                    매입 현황
+                    <span className="text-xs font-normal text-zinc-600">
+                      {statsRange === 'today' ? '(오늘)' : '(전체)'}
+                    </span>
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">오늘 요청 총액</p>
-                      <p className="mt-1 text-2xl font-bold text-white">{formatPrice(todayTotal)}</p>
-                      <p className="mt-0.5 text-xs text-zinc-600">{todayOrders.length}건</p>
+                      <p className="text-xs text-zinc-500">요청 총액</p>
+                      <p className="mt-1 text-2xl font-bold text-white">{formatPrice(statsTotal)}</p>
+                      <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.length}건</p>
                     </div>
                     <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">오늘 지급 완료</p>
-                      <p className="mt-1 text-2xl font-bold text-emerald-400">{formatPrice(todayPaidTotal)}</p>
-                      <p className="mt-0.5 text-xs text-zinc-600">{todayOrders.filter(o => o.status === 'paid').length}건</p>
+                      <p className="text-xs text-zinc-500">지급 완료</p>
+                      <p className="mt-1 text-2xl font-bold text-emerald-400">{formatPrice(statsPaidTotal)}</p>
+                      <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.filter(o => o.status === 'paid').length}건</p>
                     </div>
                     <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
                       <p className="text-xs text-zinc-500">현금 매입</p>
-                      <p className="mt-1 text-2xl font-bold text-amber-400">{todayCashCount}건</p>
+                      <p className="mt-1 text-2xl font-bold text-amber-400">{statsCashCount}건</p>
                     </div>
                     <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
                       <p className="text-xs text-zinc-500">마일리지 매입</p>
-                      <p className="mt-1 text-2xl font-bold text-emerald-400">{todayMileageCount}건</p>
+                      <p className="mt-1 text-2xl font-bold text-emerald-400">{statsMileageCount}건</p>
                     </div>
                   </div>
                 </div>
@@ -817,7 +945,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <TrendingUp className="h-4 w-4 text-violet-400" />
                     인기 매입 카드 TOP 10
-                    <span className="text-xs font-normal text-zinc-600">(전체 기간, 거절 제외)</span>
+                    <span className="text-xs font-normal text-zinc-600">(거절 제외)</span>
                   </h3>
                   {topCards.length === 0 ? (
                     <p className="py-4 text-center text-sm text-zinc-500">데이터 없음</p>
@@ -852,7 +980,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-8">
 
-                {/* 관리자 비밀번호 변경 */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Settings2 className="h-4 w-4 text-zinc-400" />
@@ -872,19 +999,14 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     placeholder="새 비밀번호 확인"
                     className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
                   />
-                  {passwordError && (
-                    <p className="text-sm text-red-400">{passwordError}</p>
-                  )}
+                  {passwordError && <p className="text-sm text-red-400">{passwordError}</p>}
                   <button
                     onClick={async () => {
                       if (newPassword.length < 4) { setPasswordError('비밀번호는 4자 이상이어야 합니다'); return }
                       if (newPassword !== confirmPassword) { setPasswordError('비밀번호가 일치하지 않습니다'); return }
                       await updateSettings({ admin_password: newPassword })
-                      setNewPassword('')
-                      setConfirmPassword('')
-                      setPasswordError(null)
-                      setPasswordSaved(true)
-                      setTimeout(() => setPasswordSaved(false), 2000)
+                      setNewPassword(''); setConfirmPassword(''); setPasswordError(null)
+                      setPasswordSaved(true); setTimeout(() => setPasswordSaved(false), 2000)
                     }}
                     disabled={isUpdating || !newPassword || !confirmPassword}
                     className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-700 font-semibold text-white transition-all hover:bg-zinc-600 disabled:opacity-40"
@@ -895,7 +1017,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
                 <div className="border-t border-zinc-800" />
 
-                {/* 마일리지 지급 비율 */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Coins className="h-4 w-4 text-emerald-400" />
@@ -905,9 +1026,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     <div className="relative flex-1">
                       <input
                         type="number"
-                        min="0"
-                        max="200"
-                        step="5"
+                        min="0" max="200" step="5"
                         placeholder={String(mileagePercent)}
                         value={editMileagePercent}
                         onChange={(e) => setEditMileagePercent(e.target.value)}
@@ -920,8 +1039,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         const val = editMileagePercent !== '' ? Number(editMileagePercent) : mileagePercent
                         await setMileagePercent(val)
                         setEditMileagePercent('')
-                        setSettingsSaved(true)
-                        setTimeout(() => setSettingsSaved(false), 2000)
+                        setSettingsSaved(true); setTimeout(() => setSettingsSaved(false), 2000)
                       }}
                       disabled={isUpdating || editMileagePercent === ''}
                       className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 font-semibold text-white transition-all hover:bg-emerald-500 disabled:opacity-40"
@@ -937,13 +1055,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
                 <div className="border-t border-zinc-800" />
 
-                {/* 동적 레어도 관리 */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Settings2 className="h-4 w-4 text-amber-400" />
                     활성 레어도 관리
                   </label>
-
                   <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-3">
                     {globalRarities.length === 0 ? (
                       <p className="py-2 text-center text-sm text-zinc-500">등록된 레어도 없음</p>
@@ -967,7 +1083,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       </div>
                     )}
                   </div>
-
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -975,8 +1090,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       onChange={(e) => setNewRarityInput(e.target.value.toUpperCase().slice(0, 5))}
                       onKeyDown={async (e) => {
                         if (e.key === 'Enter' && newRarityInput.trim()) {
-                          await addRarity(newRarityInput)
-                          setNewRarityInput('')
+                          await addRarity(newRarityInput); setNewRarityInput('')
                         }
                       }}
                       placeholder="새 레어도 (예: GR)"
@@ -986,8 +1100,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     <button
                       onClick={async () => {
                         if (!newRarityInput.trim()) return
-                        await addRarity(newRarityInput)
-                        setNewRarityInput('')
+                        await addRarity(newRarityInput); setNewRarityInput('')
                       }}
                       disabled={isUpdating || !newRarityInput.trim() || globalRarities.includes(newRarityInput.trim())}
                       className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-4 text-sm font-semibold text-black transition-all hover:bg-amber-400 disabled:opacity-40"
@@ -1007,7 +1120,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       </motion.div>
       </div>
 
-      {/* 카드 수정 모달 */}
       {adminEditCard && (
         <CardDetailModal
           card={adminEditCard}
