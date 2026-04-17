@@ -168,6 +168,8 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
         {!editMode && (
           <button
             onClick={() => setShowPinOverlay(true)}
+            aria-label="카드 관리자 설정"
+            data-testid="card-admin-button"
             className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800/80 text-zinc-400 transition-all hover:bg-zinc-700 hover:text-white"
           >
             <Settings className="h-5 w-5" />
@@ -335,6 +337,8 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
                                 setSelectedRarity(rarity)
                                 setQuantity(1)
                               }}
+                              aria-label={`${rarity} 레어도 선택`}
+                              data-testid={`card-detail-rarity-${rarity}`}
                               className={`flex h-20 flex-col items-center justify-center rounded-xl border-2 transition-all active:scale-95 ${
                                 isSelected
                                   ? `${colors.bg} ${colors.border} ring-2 ring-white/30`
@@ -396,6 +400,8 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
                     data-add-to-cart-button="true"
                     onClick={handleAddToCart}
                     disabled={!selectedRarity || added}
+                    aria-label="매입 추가"
+                    data-testid="add-to-cart-button"
                     className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl text-lg font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed ${
                       added
                         ? 'bg-emerald-600 text-white'

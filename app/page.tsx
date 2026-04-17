@@ -27,7 +27,7 @@ export default function POSPage() {
 
   const handleSearchToggle = () => {
     if (searchOpen) setSearchQuery('')
-    setSearchOpen(v => !v)
+    setSearchOpen((value) => !value)
   }
 
   return (
@@ -41,10 +41,11 @@ export default function POSPage() {
         />
       </main>
 
-      {/* 설정 버튼 — 좌하단 */}
       <div className="fixed bottom-6 left-6 z-30">
         <button
           onClick={() => setShowGlobalPinOverlay(true)}
+          aria-label="환경설정"
+          data-testid="settings-button"
           className="flex h-20 w-20 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900/95 text-zinc-300 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all hover:bg-zinc-800 hover:text-white active:scale-95"
           title="환경설정"
         >
@@ -52,10 +53,11 @@ export default function POSPage() {
         </button>
       </div>
 
-      {/* 검색 버튼 — 우하단, 장바구니 위 */}
       <div className="fixed bottom-28 right-6 z-30">
         <button
           onClick={handleSearchToggle}
+          aria-label="카드 검색"
+          data-testid="search-button"
           className={`flex h-14 w-14 items-center justify-center rounded-full border shadow-[0_12px_32px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 ${
             searchOpen
               ? 'border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
@@ -67,11 +69,12 @@ export default function POSPage() {
         </button>
       </div>
 
-      {/* 장바구니 버튼 — 우하단 */}
       <div className="fixed bottom-6 right-6 z-30">
         <button
           onClick={() => setCartModalOpen(true)}
+          aria-label="장바구니 열기"
           data-cart-button="true"
+          data-testid="cart-button"
           className="relative flex h-20 w-20 items-center justify-center rounded-full bg-amber-500 text-black shadow-[0_16px_40px_rgba(0,0,0,0.45)] transition-all hover:bg-amber-400 active:scale-95"
         >
           <ShoppingCart className="h-9 w-9" />

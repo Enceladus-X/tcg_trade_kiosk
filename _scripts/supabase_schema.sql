@@ -45,8 +45,12 @@ CREATE TABLE order_items (
   card_code TEXT NOT NULL,
   rarity    TEXT NOT NULL,
   price     INT NOT NULL,
-  quantity  INT NOT NULL DEFAULT 1
+  quantity  INT NOT NULL DEFAULT 1,
+  note      TEXT
 );
+
+-- Existing deployments may already have order_items without note.
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS note TEXT;
 
 -- 5. Realtime 활성화 (대시보드 Database > Replication에서도 설정 필요)
 ALTER PUBLICATION supabase_realtime ADD TABLE cards;

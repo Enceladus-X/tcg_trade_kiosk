@@ -31,6 +31,7 @@ export interface CartItem {
   rarity: string
   price: number
   quantity: number
+  note?: string | null
 }
 
 export interface CardWithStatus extends Card {

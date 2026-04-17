@@ -28,8 +28,15 @@ function dbToOrder(row: DbOrder): PendingOrder {
       rarity: item.rarity,
       price: item.price,
       quantity: item.quantity,
+      note: 'note' in item ? item.note ?? null : null,
     })),
   }
+}
+
+function isMissingNoteColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && maybeError.message.includes("'note' column")
 }
 
 const ORDERS_KEY = ['orders'] as const
@@ -130,11 +137,17 @@ export function useOrders() {
       newTotal,
     }: {
       orderId: string
-      itemUpdates: { itemId: string; price: number }[]
+      itemUpdates: { itemId: string; price: number; note?: string | null }[]
       newTotal: number
     }) => {
-      for (const { itemId, price } of itemUpdates) {
-        const { error } = await supabase.from('order_items').update({ price }).eq('id', itemId)
+      for (const { itemId, price, note } of itemUpdates) {
+        const patch: { price: number; note?: string | null } = { price }
+        if (note !== undefined) patch.note = note
+
+        let { error } = await supabase.from('order_items').update(patch).eq('id', itemId)
+        if (error && note !== undefined && isMissingNoteColumnError(error)) {
+          ;({ error } = await supabase.from('order_items').update({ price }).eq('id', itemId))
+        }
         if (error) throw error
       }
       const { error } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
@@ -173,7 +186,7 @@ export function useOrders() {
       [updateStatusMutation]
     ),
     updateItemPrices: useCallback(
-      (orderId: string, itemUpdates: { itemId: string; price: number }[], newTotal: number) =>
+      (orderId: string, itemUpdates: { itemId: string; price: number; note?: string | null }[], newTotal: number) =>
         updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal }),
       [updateItemPricesMutation]
     ),

@@ -61,4 +61,5 @@ export type DbOrderItem = {
   rarity: string
   price: number
   quantity: number
+  note: string | null
 }

@@ -108,6 +108,12 @@ export function useCards() {
     [updateMutation]
   )
 
+  const updateCardAsync = useCallback(
+    (cardId: string, updates: Partial<CardWithStatus>) =>
+      updateMutation.mutateAsync({ cardId, updates }),
+    [updateMutation]
+  )
+
   const updateCardImage = useCallback(
     (cardId: string, imageUrl: string) =>
       updateMutation.mutate({ cardId, updates: { imageUrl } }),
@@ -172,6 +178,7 @@ export function useCards() {
   return {
     cards,
     updateCard,
+    updateCardAsync,
     updateCardImage,
     updateCardName,
     toggleRarity,
