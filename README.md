@@ -1,10 +1,9 @@
-# TCG 매입 키오스크
+# 마린포드 싱글카드 매입 키오스크
 
+![version](https://img.shields.io/badge/version-v0.4.1-amber)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss)
 ![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64-0078D6?logo=windows)
 ![License](https://img.shields.io/badge/license-private-red)
 
@@ -12,40 +11,69 @@
 
 ## 다운로드
 
-**[Releases 페이지](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 최신 `.exe` 파일을 받으세요.
+**[Releases 페이지](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 최신 `MarinfordKiosk_v*.exe` 파일을 받으세요.
 
-별도 설치 없이 더블클릭으로 바로 실행됩니다.
+별도 설치 없이 더블클릭으로 바로 실행됩니다. 인터넷 연결 필요 (Supabase 클라우드 연동).
 
 ---
 
 ## 프로젝트 소개
 
-TCG(트레이딩 카드 게임) 카드 매장용 **매입 키오스크 데스크탑 앱**입니다.
+TCG(트레이딩 카드 게임) 카드 매장 **마린포드**의 싱글카드 매입 업무 자동화를 위한 키오스크 데스크탑 앱입니다.
 
-고객이 직접 카드를 검색하고 레어도별 매입가를 확인한 뒤 장바구니에 담아 매입 요청을 제출하면, 관리자가 승인 후 처리합니다. Next.js 정적 빌드 + Electron 포터블 패키징으로 **Windows 오프라인 환경에서 추가 설치 없이 구동**됩니다.
+고객이 직접 카드를 조회하고 레어도별 매입가를 확인한 뒤 요청을 제출하면, 직원이 관리자 화면에서 승인 후 입금 처리합니다. Supabase Realtime으로 여러 기기 간 데이터가 실시간 동기화됩니다.
+
+---
+
+## 화면 구성
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│        마린포드 유희왕 매입표          │  [유희왕 로고] [원피스 로고]  │
+│  ┌──────────────────┐  [전체] [N] [R] [SR] ...                      │
+│  │ 블레이징 도미니언 v │                                              │
+│  └──────────────────┘                                               │
+├─────────────────────────────────────────────────────────────────────┤
+│  [카드] [카드] [카드] [카드] [카드] [카드]                            │
+│  [카드] [카드] [카드] [카드] [카드] [카드]                            │
+│  [카드] [카드] [카드] [카드] [카드] [카드]                            │
+│                                                            [🔍]     │
+│  [⚙️]                                                      [🛒]     │
+└─────────────────────────────────────────────────────────────────────┘
+
+카드 클릭  → 레어도 선택 + 수량 선택 모달 → 장바구니 담기 (플라이 애니메이션)
+🛒 클릭   → 장바구니 확인 → 현금/마일리지 선택 → 고객 정보 입력 → 매입 요청 제출
+⚙️ 클릭   → PIN 입력 → 관리자 대시보드
+🔍 클릭   → 카드명/코드 실시간 검색
+```
 
 ---
 
 ## 주요 기능
 
 ### 고객 화면
-- 🃏 **카드 그리드** - 확장팩 탭별 카드 목록, 실제 카드 이미지 표시
-- 🔍 **인라인 검색** - 헤더 내 검색창으로 카드명 실시간 필터링
-- 💰 **매입가 확인** - 카드 클릭 시 레어도별 매입가 및 수량 선택 모달
-- 🛒 **장바구니** - 여러 카드 담기 후 한 번에 매입 요청 제출
 
-### 관리자 기능 (PIN 인증)
-- 🔐 **PIN 인증** - 숫자패드 UI + 키보드 입력 지원, Electron IPC로 안전하게 검증
-- ➕ **카드 추가** - 레어도 칩 클릭으로 활성화, 가격 0원이면 자동 비활성화
-- ✏️ **카드 수정 / 삭제** - 카드 상세 모달 내 편집 모드 (없는 레어도 추가 가능)
-- ⏸️ **매입 중지 / 재개** - 카드 관리 탭에서 썸네일 목록으로 일괄 확인
-- 📋 **매입 요청 관리** - 대기중 / 승인 / 지급완료 / 거절 상태 관리
-- 📁 **탭 관리** - 확장팩 탭 추가 / 삭제, 탭별 카드 수 표시
+| 기능 | 설명 |
+|------|------|
+| 게임 선택 | 우측 상단 대형 카드 버튼으로 유희왕/원피스 등 게임 대분류 전환 |
+| 탭 드롭다운 | 확장팩별 탭 선택, "전체" 선택 시 해당 게임 모든 카드 표시 |
+| 레어도 필터 | 현재 탭에 실제로 존재하는 레어도만 버튼 표시 |
+| 카드 검색 | 우하단 🔍 버튼 → 카드명/코드 실시간 필터 |
+| 매입가 확인 | 카드 클릭 → 레어도별 매입가 + 수량 선택 모달 |
+| 장바구니 | 여러 카드 담기, 합계 표시, 담기 시 플라이 애니메이션 |
+| 결제 방식 | 현금 / 마일리지 (보너스 비율 자동 적용) |
+| 매입 요청 제출 | 이름 / 은행 / 계좌번호 / 전화번호 입력 (마일리지 시 계좌 생략) |
+| 매입 중지 표시 | 해당 카드 그레이아웃 + "매입 중지" 배지 |
 
-### 시스템
-- 💾 **localStorage 영속화** - 카드/탭 데이터 새로고침 후에도 유지
-- 📦 **포터블 exe** - 설치 불필요, 더블클릭으로 바로 실행 (Windows x64)
-- 🔌 **종료 버튼** - 앱 헤더 내 전원 버튼 (Electron 환경에서만 표시)
+### 관리자 화면 (좌하단 ⚙️ → PIN 인증)
+
+| 탭 | 기능 |
+|----|------|
+| 매입 요청 | 대기/승인/지급완료/거절 상태 처리, 고객정보 원클릭 복사 |
+| 카드 추가 | 코드/이름/카테고리 + 레어도 칩으로 가격 설정, 이미지 업로드 |
+| 카드 관리 | 탭 추가/삭제, 매입 중지/재개, 카드 수정/삭제 |
+| 설정 | 관리자 비밀번호 변경, 마일리지 비율, 레어도 추가/삭제 |
+| 게임 | 게임 대분류 추가/삭제/이미지 설정, 탭-게임 연결 |
 
 ---
 
@@ -53,69 +81,15 @@ TCG(트레이딩 카드 게임) 카드 매장용 **매입 키오스크 데스크
 
 | 분류 | 기술 |
 |------|------|
-| 프레임워크 | Next.js 16 (Static Export) |
-| UI 라이브러리 | React 19 |
+| UI 프레임워크 | Next.js 16 (Static Export) |
 | 스타일링 | Tailwind CSS v4 |
-| 컴포넌트 | shadcn/ui (Radix UI) |
+| 애니메이션 | Framer Motion v12 |
+| 서버 상태 | TanStack Query v5 |
+| 데이터베이스 | Supabase (PostgreSQL + Storage + Realtime) |
 | 데스크탑 래핑 | Electron 33 |
-| 정적 파일 서빙 | electron-serve |
 | 언어 | TypeScript 5.7 |
 | 패키지 매니저 | pnpm |
-
----
-
-## 화면 구성
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  [블레이징 도미니언] [버스트 프로토콜] [...]   [🔍] [⚙️] [⏻]     │  <- 헤더
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  [카드] [카드] [카드] [카드] [카드] [카드] [카드] [카드]           │
-│  [카드] [카드] [카드] [카드] [카드] [카드] [카드] [카드]  <- 그리드 │
-│  [카드] [카드] [카드] [카드] [카드] [카드] [카드] [카드]           │
-│                                                                  │
-│                                              [🛒 장바구니 버튼]   │  <- 우측 하단
-└──────────────────────────────────────────────────────────────────┘
-
-카드 클릭
-└─> 레어도 선택 모달 (이미지 + 매입가 + 수량 선택 + 장바구니 추가)
-
-⚙️ 관리자 버튼
-└─> PIN 입력
-    └─> 관리자 대시보드
-        ├── 매입 요청 관리
-        ├── 카드 추가
-        ├── 카드 관리 (매입 중지/재개)
-        └── 탭 관리
-```
-
----
-
-## 설치 및 실행
-
-### 일반 사용자
-
-1. **[Releases](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 `.exe` 다운로드
-2. 원하는 폴더에 복사
-3. exe 더블클릭 → 실행 완료
-
----
-
-## 설정 파일
-
-exe와 **같은 폴더**에 `config.json`을 두면 관리자 PIN을 변경할 수 있습니다.  
-파일이 없으면 앱 최초 실행 시 기본값으로 자동 생성됩니다.
-
-```json
-{
-  "adminPin": "1234"
-}
-```
-
-| 필드 | 설명 | 기본값 |
-|------|------|--------|
-| `adminPin` | 관리자 PIN (4자리 숫자 권장) | `"1234"` |
+| 배포 | electron-builder portable (단일 exe, 무설치) |
 
 ---
 
@@ -124,51 +98,61 @@ exe와 **같은 폴더**에 `config.json`을 두면 관리자 PIN을 변경할 �
 ```
 tcg_trade_kiosk/
 ├── app/
-│   ├── layout.tsx
-│   └── page.tsx                  # 메인 페이지 (모달 라우팅, 상태 관리)
+│   ├── page.tsx                  - 메인 페이지 (모달 라우팅, 플로팅 버튼)
+│   └── providers.tsx             - QueryClient + Realtime 구독
 ├── components/
-│   ├── full-width-grid.tsx       # 카드 그리드 + 탭 + 검색 + 종료 버튼
-│   ├── card-detail-modal.tsx     # 카드 상세 / 구매 / 편집 모달
-│   ├── global-admin-modal.tsx    # 관리자 대시보드 (4탭)
-│   ├── cart-list-modal.tsx       # 장바구니 / 매입 요청 제출
-│   ├── pin-auth-overlay.tsx      # PIN 인증 UI (Electron IPC 연동)
-│   ├── rarity-picker.tsx         # 레어도 칩 선택 컴포넌트
-│   └── ui/
-│       └── scroll-area.tsx       # Radix UI 스크롤 영역
+│   ├── full-width-grid.tsx       - 게임 버튼, 탭 드롭다운, 카드 그리드, 레어도 필터
+│   ├── card-detail-modal.tsx     - 카드 상세 / 편집 / 삭제 / 장바구니 담기
+│   ├── global-admin-modal.tsx    - 관리자 대시보드 (5탭)
+│   ├── cart-list-modal.tsx       - 장바구니 + 매입 요청 제출
+│   ├── pin-auth-overlay.tsx      - PIN 인증
+│   ├── rarity-picker.tsx         - 레어도 칩 선택 공용 컴포넌트
+│   └── image-upload-field.tsx    - Supabase Storage 이미지 업로드
 ├── electron/
-│   ├── main.js                   # 메인 프로세스 (창 생성, config 읽기, IPC)
-│   └── preload.js                # Preload (window.electronAPI 노출)
+│   ├── main.js                   - 메인 프로세스
+│   └── preload.js                - window.electronAPI 브릿지
 ├── lib/
-│   ├── mock-cards.ts             # 초기 카드 데이터 (시드, 유희왕 블레이징 도미니언)
-│   ├── use-cards.ts              # 카드/탭 외부 스토어 (localStorage 영속화)
-│   ├── use-cart.ts               # 장바구니 스토어
-│   └── use-orders.ts             # 매입 요청 스토어
-├── public/
-│   └── cards/                    # 카드 이미지 (BLZD-KR*.png)
-├── build/
-│   ├── create-icon.py            # 아이콘 생성 스크립트
-│   └── icon.ico                  # 앱 아이콘
-├── config.json                   # 관리자 설정 (gitignore, 자동 생성)
-├── setup.bat                     # 개발 환경 빌드 자동화
-├── next.config.mjs               # Next.js 설정 (output: export)
-└── package.json                  # 의존성 + electron-builder 설정
+│   ├── supabase.ts               - Supabase 클라이언트
+│   ├── database.types.ts         - DB 타입 정의
+│   ├── mock-cards.ts             - 카드 타입 + 레어도 컬러 시스템
+│   ├── use-cards.ts              - 카드/탭 훅
+│   ├── use-games.ts              - 게임 대분류 훅
+│   ├── use-orders.ts             - 매입 요청 훅
+│   ├── use-settings.ts           - 스토어 설정 훅
+│   ├── use-cart.ts               - 장바구니 훅 (Zustand)
+│   └── use-image-upload.ts       - Storage 업로드 훅
+├── public/cards/                 - 카드 이미지 PNG
+├── setup.bat                     - 빌드 자동화 배치파일
+└── package.json
 ```
 
 ---
 
-## 관리자 접근
+## 설치 및 실행
 
-1. 화면 우측 상단 **⚙️ 설정 버튼** 클릭
-2. PIN 4자리 입력 (숫자패드 또는 키보드)
-3. 기본 PIN: **`1234`**
+### 일반 사용자 (매장 PC)
 
-PIN 변경 → `config.json`의 `adminPin` 수정 후 앱 재시작
+1. **[Releases](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)** 에서 `MarinfordKiosk_v*.exe` 다운로드
+2. 원하는 폴더에 복사
+3. 더블클릭 → 실행
+
+### 소스 빌드
+
+1. [Node.js LTS](https://nodejs.org) 설치
+2. `.env.local` 에 Supabase 키 입력
+3. `setup.bat` 실행 → `dist/MarinfordKiosk_v*.exe` 생성
 
 ---
 
-## 개발자용 빌드
+## Supabase 설정 (최초 1회)
 
-> 소스에서 직접 빌드할 경우에만 필요합니다.
+관리자 PIN 및 설정은 Supabase `store_settings` 테이블(id=1)에서 관리합니다.
 
-1. [Node.js LTS](https://nodejs.org) 설치
-2. `setup.bat` 더블클릭 (pnpm 설치 → 빌드 → exe 생성 자동화)
+```sql
+-- 게임 이미지 컬럼 (최초 설정 시)
+ALTER TABLE games ADD COLUMN IF NOT EXISTS image_url TEXT;
+```
+
+Storage 버킷 2개 필요 (Public):
+- `card-images` — 카드 이미지
+- `game-images` — 게임 로고 이미지
