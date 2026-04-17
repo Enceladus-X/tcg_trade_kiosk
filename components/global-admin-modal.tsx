@@ -49,7 +49,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [passwordSaved, setPasswordSaved] = useState(false)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
-    const text = `${order.customerName} / ${order.bankName} / ${order.accountNumber} / ${order.phoneNumber}`
+    const text = [order.customerName, order.bankName, order.accountNumber, order.phoneNumber]
+      .filter(Boolean)
+      .join(' ')
     navigator.clipboard.writeText(text).then(() => {
       setCopiedOrderId(order.id)
       setTimeout(() => setCopiedOrderId(null), 2000)
