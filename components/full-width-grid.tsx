@@ -3,11 +3,12 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Settings, Search, X, Power, ChevronLeft, Gamepad2 } from 'lucide-react'
+import { Settings, Search, X, Power } from 'lucide-react'
 import { searchCards, type CardWithStatus, type CardPrice, rarityColors, getRarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useGames } from '@/lib/use-games'
 import { useStoreSettings } from '@/lib/use-settings'
+import { GameNavBar } from '@/components/game-nav-bar'
 
 interface FullWidthGridProps {
   onCardClick: (card: CardWithStatus) => void
@@ -39,6 +40,13 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
 
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
   const hasGames = games.length > 0
+
+  // 게임 목록 로드 후 첫 게임 자동 선택
+  useEffect(() => {
+    if (hasGames && !selectedGame && games.length > 0) {
+      setSelectedGame(games[0].id)
+    }
+  }, [games]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 게임 선택 시 해당 게임의 첫 번째 탭으로 초기화
   useEffect(() => {
@@ -102,32 +110,28 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
     <div className="flex h-full flex-col">
       {/* 매장 타이틀 배너 */}
       <div className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-6 py-2">
-        <div className="flex items-center gap-3">
-          {hasGames && selectedGame && (
-            <button
-              onClick={() => setSelectedGame(null)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-          )}
-          <div className="flex items-baseline gap-3">
-            <span className="text-xl font-extrabold tracking-tight text-amber-400">
-              {hasGames && selectedGame
-                ? (() => { const n = games.find(g => g.id === selectedGame)?.name; return n ? `마린포드 ${n} 매입표` : '마린포드 매입표' })()
-                : '마린포드 싱글카드 매매표'
-              }
-            </span>
-            <span className="text-xs text-zinc-600">
-              {hasGames && !selectedGame ? '게임을 선택하세요' : '카드를 선택하면 매입가를 확인할 수 있습니다'}
-            </span>
-          </div>
+        <div className="flex items-baseline gap-3">
+          <span className="text-xl font-extrabold tracking-tight text-amber-400">
+            {hasGames && selectedGame
+              ? (() => { const n = games.find(g => g.id === selectedGame)?.name; return n ? `마린포드 ${n} 매입표` : '마린포드 매입표' })()
+              : '마린포드 싱글카드 매매표'
+            }
+          </span>
+          <span className="text-xs text-zinc-600">카드를 선택하면 매입가를 확인할 수 있습니다</span>
         </div>
       </div>
 
-      {/* Header — 게임 선택 화면에선 검색/탭 숨김 */}
-      {(!hasGames || selectedGame) && (
-        <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
+      {/* 게임 네비게이션 바 — hasGames 이면 항상 표시 */}
+      {hasGames && (
+        <GameNavBar
+          games={games}
+          selectedGameId={selectedGame}
+          onSelect={setSelectedGame}
+        />
+      )}
+
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             {searchOpen ? (
               <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
@@ -196,30 +200,9 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
             )}
           </div>
         </div>
-      )}
-
-      {/* 게임 대분류 없는 경우에만 상단 우측 설정 버튼 표시 */}
-      {hasGames && !selectedGame && (
-        <div className="flex items-center justify-end gap-2 px-4 py-2">
-          <button
-            onClick={onGlobalAdminClick}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-          {isElectron && (
-            <button
-              onClick={() => window.close()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
-            >
-              <Power className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-      )}
 
       {/* 레어도 필터 바 */}
-      {(!hasGames || selectedGame) && activeRarities.length > 0 && (
+      {activeRarities.length > 0 && (
         <div
           className="shrink-0 flex items-center gap-2 overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-4 py-2"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
@@ -254,75 +237,41 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
         </div>
       )}
 
-      {/* 메인 콘텐츠 */}
+      {/* 카드 그리드 */}
       <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
         <AnimatePresence mode="wait">
-          {/* 게임 대분류 선택 화면 */}
-          {hasGames && !selectedGame ? (
-            <motion.div
-              key="game-selector"
-              initial={{ opacity: 0, x: -24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              <p className="mb-4 text-sm text-zinc-500">게임 카테고리를 선택하세요</p>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                {games.map((game, i) => (
-                  <motion.button
-                    key={game.id}
-                    onClick={() => setSelectedGame(game.id)}
-                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition-all hover:border-amber-500/50 hover:bg-zinc-800 active:scale-95"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.2 }}
-                  >
-                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-zinc-800 group-hover:bg-zinc-700">
-                      <Gamepad2 className="h-8 w-8 text-amber-400" />
-                    </div>
-                    <span className="text-center text-sm font-bold text-white">{game.name}</span>
-                    <span className="text-xs text-zinc-500">
-                      {tabObjects.filter(t => t.game_id === game.id).length}개 팩
-                    </span>
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
-          ) : (
-            /* 카드 그리드 */
-            <motion.div
-              key={`cards-${activeTab}`}
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 24 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
-                {filteredCards.map((card, i) => (
-                  <motion.div
-                    key={card.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.15 }}
-                  >
-                    <CardTile card={card} onClick={() => onCardClick(card)} />
-                  </motion.div>
-                ))}
-              </div>
+          <motion.div
+            key={`cards-${activeTab}`}
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 24 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
+              {filteredCards.map((card, i) => (
+                <motion.div
+                  key={card.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.15 }}
+                >
+                  <CardTile card={card} onClick={() => onCardClick(card)} />
+                </motion.div>
+              ))}
+            </div>
 
-              {filteredCards.length === 0 && (
-                <div className="flex h-64 items-center justify-center">
-                  <p className="text-zinc-500">
-                    {searchQuery
-                      ? `"${searchQuery}" 검색 결과 없음`
-                      : visibleTabs.length === 0
-                      ? '탭을 먼저 생성하세요'
-                      : '카드가 없습니다'}
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
+            {filteredCards.length === 0 && (
+              <div className="flex h-64 items-center justify-center">
+                <p className="text-zinc-500">
+                  {searchQuery
+                    ? `"${searchQuery}" 검색 결과 없음`
+                    : visibleTabs.length === 0
+                    ? hasGames ? '게임에 탭을 배정하세요' : '탭을 먼저 생성하세요'
+                    : '카드가 없습니다'}
+                </p>
+              </div>
+            )}
+          </motion.div>
         </AnimatePresence>
       </div>
     </div>

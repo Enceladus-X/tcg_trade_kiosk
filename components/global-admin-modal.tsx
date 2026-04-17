@@ -1,16 +1,55 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins, Pencil } from 'lucide-react'
+import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins, Pencil, ImagePlus, Loader2 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useStoreSettings } from '@/lib/use-settings'
-import { useGames } from '@/lib/use-games'
+import { useGames, type Game } from '@/lib/use-games'
+import { useImageUpload } from '@/lib/use-image-upload'
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
+
+// 게임 이미지 업로드 버튼 (각 게임 행에서 독립적으로 훅 인스턴스를 가져야 함)
+function GameImageUploadButton({ game, onUpload }: { game: Game; onUpload: (url: string) => void }) {
+  const { upload, isUploading } = useImageUpload({ bucket: 'game-images', prefix: 'games' })
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const { publicUrl } = await upload(file)
+      onUpload(publicUrl)
+    } finally {
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={isUploading}
+        title="게임 이미지 업로드"
+        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-600 transition-colors hover:border-violet-500 disabled:opacity-40"
+      >
+        {isUploading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+        ) : game.imageUrl ? (
+          <img src={game.imageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <ImagePlus className="h-4 w-4 text-zinc-500 hover:text-violet-400" />
+        )}
+      </button>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+    </>
+  )
+}
 
 interface GlobalAdminModalProps {
   onClose: () => void
@@ -32,7 +71,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { orders, updateOrderStatus, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
-  const { games, addGame, removeGame, assignTabToGame, isAdding: isAddingGame } = useGames()
+  const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
   const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
@@ -644,8 +683,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 ) : (
                   <div className="space-y-2">
                     {games.map((game) => (
-                      <div key={game.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
-                        <div>
+                      <div key={game.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
+                        {/* 이미지 업로드 버튼 */}
+                        <GameImageUploadButton
+                          game={game}
+                          onUpload={(url) => updateGameImage(game.id, url)}
+                        />
+                        <div className="flex-1 min-w-0">
                           <p className="font-semibold text-white">{game.name}</p>
                           <p className="text-xs text-zinc-500">
                             {tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨
@@ -653,7 +697,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         </div>
                         <button
                           onClick={() => removeGame(game.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

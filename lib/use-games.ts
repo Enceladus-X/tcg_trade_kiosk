@@ -9,12 +9,18 @@ export interface Game {
   id: string
   name: string
   sortOrder: number
+  imageUrl: string | null
 }
 
 export const GAMES_KEY = ['games'] as const
 
 function dbToGame(row: DbGame): Game {
-  return { id: row.id, name: row.name, sortOrder: row.sort_order }
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sort_order,
+    imageUrl: row.image_url ?? null,
+  }
 }
 
 export function useGames() {
@@ -50,8 +56,18 @@ export function useGames() {
 
   const removeMutation = useMutation({
     mutationFn: async (gameId: string) => {
-      // game 삭제 시 tabs.game_id는 ON DELETE SET NULL으로 자동 해제
       const { error } = await supabase.from('games').delete().eq('id', gameId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const updateImageMutation = useMutation({
+    mutationFn: async ({ gameId, imageUrl }: { gameId: string; imageUrl: string }) => {
+      const { error } = await supabase
+        .from('games')
+        .update({ image_url: imageUrl })
+        .eq('id', gameId)
       if (error) throw error
     },
     onSuccess: invalidate,
@@ -77,6 +93,10 @@ export function useGames() {
     removeGame: useCallback(
       (gameId: string) => removeMutation.mutate(gameId),
       [removeMutation]
+    ),
+    updateGameImage: useCallback(
+      (gameId: string, imageUrl: string) => updateImageMutation.mutateAsync({ gameId, imageUrl }),
+      [updateImageMutation]
     ),
     assignTabToGame: useCallback(
       (tabName: string, gameId: string | null) =>
