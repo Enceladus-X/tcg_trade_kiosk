@@ -284,22 +284,22 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
                     type="button"
                     onClick={() => setSelectedGame(game.id)}
                     title={game.name}
-                    className={`flex shrink-0 items-center justify-center rounded-[1.9rem] border shadow-[0_18px_36px_rgba(0,0,0,0.42)] transition-all ${
+                    className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-[1.9rem] border shadow-[0_18px_36px_rgba(0,0,0,0.42)] transition-all ${
                       isSelected
-                        ? 'border-amber-300/90 bg-zinc-900 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_18px_36px_rgba(0,0,0,0.42)]'
-                        : 'border-zinc-700/90 bg-zinc-900/92 hover:border-zinc-500 hover:bg-zinc-900'
-                    } ${hasImage ? 'h-[5.75rem] w-[10.5rem] p-2' : 'h-[5.75rem] min-w-[148px] px-4'}`}
+                        ? 'border-amber-300/90 bg-zinc-800 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_18px_36px_rgba(0,0,0,0.42)]'
+                        : 'border-zinc-700/90 bg-zinc-800 hover:border-zinc-500'
+                    } ${hasImage ? 'h-[5.75rem] w-[10.5rem]' : 'h-[5.75rem] min-w-[148px] px-4'}`}
                   >
                     {hasImage ? (
-                      <div className={`flex h-full w-full items-center justify-center overflow-hidden rounded-[1.35rem] border ${
-                        isSelected ? 'border-amber-300/60' : 'border-zinc-700'
-                      } bg-zinc-800`}>
-                        <img
-                          src={game.imageUrl!}
-                          alt={game.name}
-                          className="h-full w-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                        />
+                      <div className="flex h-full w-full items-center justify-center p-2">
+                        <div className="h-full w-full overflow-hidden rounded-2xl bg-white">
+                          <img
+                            src={game.imageUrl!}
+                            alt={game.name}
+                            className="h-full w-full object-contain p-1.5"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center">
