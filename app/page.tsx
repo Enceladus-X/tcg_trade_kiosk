@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useIsFetching } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Settings, ShoppingCart, Search, X } from 'lucide-react'
+import { Settings, ShoppingCart, Search, Wifi, WifiOff, RefreshCw, X } from 'lucide-react'
 import { FullWidthGrid } from '@/components/full-width-grid'
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { CartListModal } from '@/components/cart-list-modal'
@@ -10,6 +11,7 @@ import { GlobalAdminModal } from '@/components/global-admin-modal'
 import { PinAuthOverlay } from '@/components/pin-auth-overlay'
 import { useCart } from '@/lib/use-cart'
 import { type CardWithStatus } from '@/lib/mock-cards'
+import { useStoreSettings } from '@/lib/use-settings'
 
 export default function POSPage() {
   const [selectedCard, setSelectedCard] = useState<CardWithStatus | null>(null)
@@ -18,7 +20,22 @@ export default function POSPage() {
   const [showGlobalPinOverlay, setShowGlobalPinOverlay] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isOnline, setIsOnline] = useState(true)
   const { totalQuantity } = useCart()
+  const { lastUpdatedAt } = useStoreSettings()
+  const isFetching = useIsFetching() > 0
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const update = () => setIsOnline(window.navigator.onLine)
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
 
   const handleGlobalPinSuccess = () => {
     setShowGlobalPinOverlay(false)
@@ -40,6 +57,32 @@ export default function POSPage() {
           onSearchQueryChange={setSearchQuery}
         />
       </main>
+
+      <div className="pointer-events-none fixed left-6 top-4 z-30">
+        <div className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.35)] backdrop-blur-md ${
+          !isOnline
+            ? 'border-red-500/40 bg-red-500/15 text-red-200'
+            : isFetching
+            ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
+            : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+        }`}>
+          {!isOnline ? (
+            <WifiOff className="h-4 w-4" />
+          ) : isFetching ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Wifi className="h-4 w-4" />
+          )}
+          <span>
+            {!isOnline ? '오프라인' : isFetching ? '동기화 중' : '동기화 정상'}
+          </span>
+          {lastUpdatedAt && (
+            <span className="text-[11px] opacity-80">
+              {new Date(lastUpdatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+      </div>
 
       <div className="fixed bottom-6 left-6 z-30">
         <button

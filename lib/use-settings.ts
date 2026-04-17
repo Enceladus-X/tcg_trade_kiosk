@@ -88,6 +88,7 @@ export function useStoreSettings() {
     settings,
     isLoading,
     isError,
+    lastUpdatedAt: settings?.updated_at ?? null,
     mileageRate: settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate,
     mileagePercent: rateToPercent(settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate),
     adminPassword: settings?.admin_password ?? DEFAULT_SETTINGS.admin_password,

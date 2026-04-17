@@ -4,7 +4,7 @@ import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus } from './mock-cards'
-import { type DbOrder } from './database.types'
+import { type DbOrder, type DbOrderItemAdjustment } from './database.types'
 
 const LOCAL_ORDER_ITEM_NOTES_KEY = 'tcg-trade-kiosk.order-item-notes'
 
@@ -59,6 +59,43 @@ function isMissingNoteColumnError(error: unknown): boolean {
 }
 
 const ORDERS_KEY = ['orders'] as const
+const ORDER_ADJUSTMENTS_KEY = ['order-item-adjustments'] as const
+
+export type OrderItemAdjustment = {
+  id: string
+  orderId: string
+  itemId: string
+  cardName: string
+  rarity: string
+  previousPrice: number
+  nextPrice: number
+  note: string | null
+  changedAt: string
+}
+
+function dbToAdjustment(row: DbOrderItemAdjustment): OrderItemAdjustment {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    itemId: row.order_item_id,
+    cardName: row.card_name,
+    rarity: row.rarity,
+    previousPrice: row.previous_price,
+    nextPrice: row.next_price,
+    note: row.note,
+    changedAt: row.changed_at,
+  }
+}
+
+function isMissingAdjustmentsTableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return (
+    maybeError.code === 'PGRST205' ||
+    maybeError.code === '42P01' ||
+    (typeof maybeError.message === 'string' && maybeError.message.includes('order_item_adjustments'))
+  )
+}
 
 // --- useOrders ---
 
@@ -78,8 +115,35 @@ export function useOrders() {
     },
   })
 
+  const { data: priceAdjustmentsByOrderId = {} } = useQuery({
+    queryKey: ORDER_ADJUSTMENTS_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('order_item_adjustments')
+        .select('*')
+        .order('changed_at', { ascending: false })
+
+      if (error) {
+        if (isMissingAdjustmentsTableError(error)) return {}
+        throw error
+      }
+
+      return (data as DbOrderItemAdjustment[]).reduce<Record<string, OrderItemAdjustment[]>>((acc, row) => {
+        const mapped = dbToAdjustment(row)
+        acc[mapped.orderId] = [...(acc[mapped.orderId] ?? []), mapped]
+        return acc
+      }, {})
+    },
+    staleTime: 30_000,
+  })
+
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ORDERS_KEY }),
+    [queryClient]
+  )
+
+  const invalidateAdjustments = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ORDER_ADJUSTMENTS_KEY }),
     [queryClient]
   )
 
@@ -193,12 +257,34 @@ export function useOrders() {
     onSuccess: invalidate,
   })
 
+  const createAdjustmentsMutation = useMutation({
+    mutationFn: async (entries: Omit<OrderItemAdjustment, 'id' | 'changedAt'>[]) => {
+      if (entries.length === 0) return
+      const payload = entries.map((entry) => ({
+        order_id: entry.orderId,
+        order_item_id: entry.itemId,
+        card_name: entry.cardName,
+        rarity: entry.rarity,
+        previous_price: entry.previousPrice,
+        next_price: entry.nextPrice,
+        note: entry.note,
+      }))
+      const { error } = await supabase.from('order_item_adjustments').insert(payload)
+      if (error) {
+        if (isMissingAdjustmentsTableError(error)) return
+        throw error
+      }
+    },
+    onSuccess: invalidateAdjustments,
+  })
+
   const pendingOrders  = orders.filter(o => o.status === 'pending')
   const approvedOrders = orders.filter(o => o.status === 'approved')
   const paidOrders     = orders.filter(o => o.status === 'paid')
 
   return {
     orders,
+    priceAdjustmentsByOrderId,
     pendingOrders,
     approvedOrders,
     paidOrders,
@@ -217,6 +303,11 @@ export function useOrders() {
       (orderId: string, itemUpdates: { itemId: string; price: number; note?: string | null }[], newTotal: number) =>
         updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal }),
       [updateItemPricesMutation]
+    ),
+    createPriceAdjustments: useCallback(
+      (entries: Omit<OrderItemAdjustment, 'id' | 'changedAt'>[]) =>
+        createAdjustmentsMutation.mutateAsync(entries),
+      [createAdjustmentsMutation]
     ),
     deleteOrder: useCallback(
       (orderId: string) => deleteMutation.mutate(orderId),

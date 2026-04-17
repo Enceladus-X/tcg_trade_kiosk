@@ -63,3 +63,15 @@ export type DbOrderItem = {
   quantity: number
   note: string | null
 }
+
+export type DbOrderItemAdjustment = {
+  id: string
+  order_id: string
+  order_item_id: string
+  card_name: string
+  rarity: string
+  previous_price: number
+  next_price: number
+  note: string | null
+  changed_at: string
+}

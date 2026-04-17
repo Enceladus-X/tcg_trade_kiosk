@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
   Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
-  MessageSquare, Table2, Download,
+  MessageSquare, Table2, Download, Upload, Printer, FileText,
 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
@@ -77,10 +77,50 @@ const ORDER_STATUS_FILTERS: { key: OrderStatus | 'all'; label: string }[] = [
 const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
 const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
 
+function parseCsvRow(line: string): string[] {
+  const cells: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]
+    const next = line[i + 1]
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"'
+      i += 1
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      cells.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current.trim())
+  return cells
+}
+
 type AdminTab = 'orders' | 'add-card' | 'cards' | 'game-tabs' | 'stats' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
-  const { orders, updateOrderStatus, updateItemPrices, deleteOrder } = useOrders()
+  const {
+    orders,
+    priceAdjustmentsByOrderId,
+    updateOrderStatus,
+    updateItemPrices,
+    createPriceAdjustments,
+    deleteOrder,
+  } = useOrders()
   const { cards, addCard, setCardStopped, updateCardAsync } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
@@ -89,6 +129,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
+  const [orderSearch, setOrderSearch] = useState('')
 
   // 매입 요청 필터
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all')
@@ -123,6 +164,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [bulkEdits, setBulkEdits] = useState<Record<string, Record<string, string>>>({})
   const [bulkSaving, setBulkSaving] = useState(false)
   const [bulkSaved,  setBulkSaved]  = useState(false)
+  const [bulkImportError, setBulkImportError] = useState<string | null>(null)
+  const [bulkImportSuccess, setBulkImportSuccess] = useState<string | null>(null)
+  const bulkImportInputRef = useRef<HTMLInputElement>(null)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
     const text = [order.customerName, order.bankName, order.accountNumber, order.phoneNumber]
@@ -138,13 +182,38 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [newCardCode, setNewCardCode]         = useState('')
   const [newCardImageUrl, setNewCardImageUrl] = useState('')
   const [newCardCategory, setNewCardCategory] = useState<string>(tabs[0] ?? '')
+  const [newCardCategoryMenuOpen, setNewCardCategoryMenuOpen] = useState(false)
   const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>({ ...emptyEnabled })
   const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>({ ...emptyPrices })
+  const newCardCategoryMenuRef = useRef<HTMLDivElement>(null)
 
   const [cardSearch, setCardSearch]   = useState('')
   const [adminEditCard, setAdminEditCard] = useState<CardWithStatus | null>(null)
   const [newGameName, setNewGameName] = useState('')
   const [newTabName,  setNewTabName]  = useState('')
+
+  useEffect(() => {
+    if (!newCardCategoryMenuOpen) return
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (newCardCategoryMenuRef.current && !newCardCategoryMenuRef.current.contains(event.target as Node)) {
+        setNewCardCategoryMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [newCardCategoryMenuOpen])
+
+  useEffect(() => {
+    if (!tabs.length) {
+      setNewCardCategory('')
+      return
+    }
+    if (!newCardCategory || !tabs.includes(newCardCategory)) {
+      setNewCardCategory(tabs[0])
+    }
+  }, [newCardCategory, tabs])
 
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
@@ -250,6 +319,24 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         ? Math.round(newBaseTotal * order.mileageRate)
         : newBaseTotal
       await updateItemPrices(order.id, itemUpdates, newTotal)
+      const adjustmentEntries = itemUpdates
+        .map((update) => {
+          const item = order.items.find((current) => current.itemId === update.itemId)
+          if (!item || item.price === update.price) return null
+          return {
+            orderId: order.id,
+            itemId: update.itemId,
+            cardName: item.cardName,
+            rarity: item.rarity,
+            previousPrice: item.price,
+            nextPrice: update.price,
+            note: update.note ?? null,
+          }
+        })
+        .filter((entry) => entry !== null)
+      if (adjustmentEntries.length > 0) {
+        await createPriceAdjustments(adjustmentEntries)
+      }
       setAdjustedOrderIds(prev => new Set([...prev, order.id]))
     } catch (error) {
       console.error('[handleSavePrices]', error)
@@ -341,6 +428,143 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     URL.revokeObjectURL(url)
   }
 
+  const handleBulkImportClick = () => {
+    bulkImportInputRef.current?.click()
+  }
+
+  const handleBulkImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setBulkImportError(null)
+    setBulkImportSuccess(null)
+
+    try {
+      const text = await file.text()
+      const rows = text
+        .replace(/^\uFEFF/, '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map(parseCsvRow)
+
+      if (rows.length < 2) throw new Error('가져올 데이터가 없습니다.')
+
+      const header = rows[0]
+      const rarityIndexes = bulkRarities
+        .map((rarity) => ({ rarity, index: header.findIndex((cell) => cell.trim().toUpperCase() === rarity.toUpperCase()) }))
+        .filter((entry) => entry.index >= 0)
+
+      if (rarityIndexes.length === 0) throw new Error('CSV 헤더에서 레어도 컬럼을 찾지 못했습니다.')
+
+      const nextEdits: Record<string, Record<string, string>> = {}
+      let matchedRows = 0
+
+      for (const row of rows.slice(1)) {
+        const code = row[1]?.trim()
+        const name = row[0]?.trim()
+        const card = bulkTabCards.find((item) => (code && item.code === code) || (!code && name && item.name === name))
+        if (!card) continue
+
+        const cardEdits: Record<string, string> = {}
+        for (const { rarity, index } of rarityIndexes) {
+          cardEdits[rarity] = row[index]?.trim() ?? ''
+        }
+        nextEdits[card.id] = cardEdits
+        matchedRows += 1
+      }
+
+      if (matchedRows === 0) throw new Error('현재 탭의 카드와 일치하는 행이 없습니다.')
+
+      setBulkEdits(nextEdits)
+      setBulkImportSuccess(`${matchedRows}개 카드 가격을 불러왔습니다.`)
+      setTimeout(() => setBulkImportSuccess(null), 2500)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'CSV 불러오기에 실패했습니다.'
+      setBulkImportError(message)
+    } finally {
+      if (bulkImportInputRef.current) bulkImportInputRef.current.value = ''
+    }
+  }
+
+  const handlePrintOrder = (order: (typeof orders)[number], mode: 'estimate' | 'receipt') => {
+    if (typeof window === 'undefined') return
+    const printWindow = window.open('', '_blank', 'width=720,height=900')
+    if (!printWindow) return
+
+    const title = mode === 'estimate' ? '매입 견적서' : '매입 지급 확인서'
+    const statusLabel = mode === 'estimate' ? '견적' : '지급'
+    const mileageAppliedTotal = order.mileageRate
+      ? Math.round(order.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * order.mileageRate)
+      : null
+    const mileagePercent = order.mileageRate ? Math.round((order.mileageRate - 1) * 100) : null
+    const itemRows = order.items.map((item) => `
+      <tr>
+        <td>${item.cardName}</td>
+        <td>${item.rarity}</td>
+        <td>${item.quantity}</td>
+        <td>${formatPrice(item.price)}</td>
+        <td>${item.note ?? ''}</td>
+      </tr>
+    `).join('')
+
+    const html = `
+      <!doctype html>
+      <html lang="ko">
+      <head>
+        <meta charset="utf-8" />
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+          h1 { margin: 0 0 8px; font-size: 28px; }
+          .meta { margin-bottom: 20px; color: #444; }
+          .box { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th, td { border-bottom: 1px solid #e5e5e5; padding: 10px 8px; text-align: left; font-size: 14px; }
+          th { background: #f7f7f7; }
+          .total { font-size: 24px; font-weight: 700; text-align: right; margin-top: 16px; }
+          .footer { margin-top: 28px; color: #555; font-size: 13px; }
+        </style>
+      </head>
+      <body>
+        <h1>마린포드 ${title}</h1>
+        <div class="meta">${statusLabel} 일시: ${formatDate(order.createdAt)}</div>
+        <div class="box">
+          <div>고객명: ${order.customerName}</div>
+          <div>연락처: ${order.phoneNumber}</div>
+          <div>계좌: ${order.bankName} ${order.accountNumber}</div>
+          <div>결제수단: ${order.paymentMethod === 'mileage' ? '마일리지' : '현금'}</div>
+          ${order.paymentMethod === 'mileage' && order.mileageRate
+            ? `<div>마일리지 배율: x${order.mileageRate.toFixed(2)} (+${mileagePercent}%)</div>
+               <div>마일리지 적용 지급액: ${formatPrice(mileageAppliedTotal ?? order.totalPrice)}</div>`
+            : ''
+          }
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>카드명</th>
+              <th>레어도</th>
+              <th>수량</th>
+              <th>매입가</th>
+              <th>조정 사유</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+        <div class="total">총 ${formatPrice(order.totalPrice)}</div>
+        <div class="footer">마린포드 TCG Kiosk</div>
+      </body>
+      </html>
+    `
+
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+  }
+
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -348,9 +572,22 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     ? cards.filter(c => c.name.includes(cardSearch) || c.code.includes(cardSearch))
     : cards
 
-  const filteredOrders = orderStatusFilter === 'all'
-    ? orders
-    : orders.filter(o => o.status === orderStatusFilter)
+  const filteredOrders = orders.filter((order) => {
+    const matchesStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter
+    if (!matchesStatus) return false
+    if (!orderSearch.trim()) return true
+
+    const query = orderSearch.trim().toLowerCase()
+    return [
+      order.customerName,
+      order.phoneNumber,
+      order.accountNumber,
+      order.bankName,
+      ...order.items.flatMap((item) => [item.cardName, item.cardCode, item.note ?? '']),
+    ]
+      .filter(Boolean)
+      .some((value) => value.toLowerCase().includes(query))
+  })
 
   // 통계
   const todayStr = new Date().toDateString()
@@ -451,6 +688,17 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 })}
               </div>
 
+              <div className="mb-5 flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3">
+                <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="고객명, 연락처, 계좌번호, 카드명으로 검색..."
+                  className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+                />
+              </div>
+
               {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
@@ -477,6 +725,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       : false
                     const hasChanges = pricesChanged || notesChanged
                     const isAdjusted = adjustedOrderIds.has(order.id)
+                    const orderAuditEntries = priceAdjustmentsByOrderId[order.id] ?? []
 
                     return (
                       <div key={order.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800/50">
@@ -550,6 +799,20 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 ? <Check className="h-4 w-4 text-emerald-400" />
                                 : <Copy className="h-4 w-4" />
                               }
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePrintOrder(order, 'estimate') }}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-700 text-zinc-400 transition-colors hover:bg-zinc-600 hover:text-white"
+                              title="견적서 출력"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePrintOrder(order, 'receipt') }}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-700 text-zinc-400 transition-colors hover:bg-zinc-600 hover:text-white"
+                              title="영수증 출력"
+                            >
+                              <Printer className="h-4 w-4" />
                             </button>
                             <div className="text-right">
                               <p className={`text-lg font-bold ${order.paymentMethod === 'mileage' ? 'text-emerald-400' : 'text-amber-500'}`}>
@@ -701,6 +964,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               </div>
                             )}
 
+                            {orderAuditEntries.length > 0 && (
+                              <div className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                                <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-400">
+                                  <Scissors className="h-3.5 w-3.5 text-sky-400" />
+                                  가격 조정 이력
+                                </div>
+                                <div className="space-y-2">
+                                  {orderAuditEntries.slice(0, 6).map((entry) => (
+                                    <div key={entry.id} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <span className="font-medium text-white">{entry.cardName}</span>
+                                          <span className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{entry.rarity}</span>
+                                        </div>
+                                        <span className="shrink-0 text-zinc-500">{formatDate(entry.changedAt)}</span>
+                                      </div>
+                                      <div className="mt-1 flex flex-wrap items-center gap-2 text-zinc-400">
+                                        <span>{formatPrice(entry.previousPrice)}</span>
+                                        <span className="text-zinc-600">→</span>
+                                        <span className="font-semibold text-sky-400">{formatPrice(entry.nextPrice)}</span>
+                                        {entry.note && <span className="text-zinc-500">| {entry.note}</span>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex gap-2">
                               {order.status === 'pending' && (
                                 <>
@@ -735,13 +1026,59 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {activeTab === 'add-card' && (
             <div className="p-6">
               <div className="mx-auto max-w-xl space-y-5">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-zinc-400">확장팩 탭 *</label>
-                  <select value={newCardCategory} onChange={(e) => setNewCardCategory(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-zinc-600 focus:outline-none">
-                    {tabs.map(tab => <option key={tab} value={tab}>{tab}</option>)}
-                  </select>
+                  <div className="relative" ref={newCardCategoryMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setNewCardCategoryMenuOpen((open) => !open)}
+                      className="flex w-full items-center justify-between rounded-2xl border border-zinc-700 bg-zinc-800/90 px-4 py-3 text-left shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-amber-400/60"
+                    >
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Expansion Set</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{newCardCategory || '확장팩 탭을 선택하세요'}</p>
+                      </div>
+                      <ChevronDown
+                        className={`h-5 w-5 shrink-0 text-amber-300 transition-transform ${newCardCategoryMenuOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    <AnimatePresence>
+                      {newCardCategoryMenuOpen && tabs.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950 shadow-2xl"
+                        >
+                          {tabs.map((tab, index) => {
+                            const isSelected = newCardCategory === tab
+                            return (
+                              <motion.button
+                                key={tab}
+                                type="button"
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.02, duration: 0.12 }}
+                                onClick={() => {
+                                  setNewCardCategory(tab)
+                                  setNewCardCategoryMenuOpen(false)
+                                }}
+                                className={`block w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                  isSelected ? 'bg-amber-500 text-black' : 'text-zinc-200 hover:bg-zinc-800'
+                                }`}
+                              >
+                                {tab}
+                              </motion.button>
+                            )
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">카드명 *</label>
                   <input type="text" value={newCardName} onChange={(e) => setNewCardName(e.target.value)}
@@ -854,6 +1191,38 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     ))}
                   </div>
 
+                  <input
+                    ref={bulkImportInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={handleBulkImportFile}
+                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleBulkImportClick}
+                      className="flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/12 px-4 py-2 text-sm font-medium text-cyan-300 transition-colors hover:bg-cyan-500/20"
+                    >
+                      <Upload className="h-4 w-4" />
+                      CSV 가져오기
+                    </button>
+                    <button
+                      onClick={handleBulkExportCsv}
+                      className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/12 px-4 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                    >
+                      <Download className="h-4 w-4" />
+                      CSV 내보내기
+                    </button>
+                  </div>
+
+                  {bulkImportError && (
+                    <p className="rounded-lg bg-red-950/60 px-3 py-2 text-xs text-red-300">{bulkImportError}</p>
+                  )}
+                  {bulkImportSuccess && (
+                    <p className="rounded-lg bg-emerald-950/60 px-3 py-2 text-xs text-emerald-300">{bulkImportSuccess}</p>
+                  )}
+
                   {bulkTabCards.length === 0 ? (
                     <p className="py-8 text-center text-sm text-zinc-500">이 탭에 카드가 없습니다</p>
                   ) : (
@@ -913,13 +1282,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       </div>
 
                       {/* 저장 버튼 */}
-                      <button
-                        onClick={handleBulkExportCsv}
-                        className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/12 py-3 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20"
-                      >
-                        <Download className="h-4 w-4" />
-                        CSV 내보내기
-                      </button>
                       <button
                         onClick={handleBulkSave}
                         disabled={bulkChangedCount === 0 || bulkSaving}

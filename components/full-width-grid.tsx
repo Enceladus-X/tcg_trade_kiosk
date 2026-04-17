@@ -39,6 +39,8 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
 
   const tabMenuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const initializedGameRef = useRef<string | null>(null)
+  const selectedTabRef = useRef(selectedTab)
 
   const isElectron = typeof window !== 'undefined' && !!(window as { electronAPI?: unknown }).electronAPI
   const hasGames = games.length > 0
@@ -50,11 +52,31 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
   }, [games, hasGames, selectedGame])
 
   useEffect(() => {
-    if (selectedGame) {
-      const firstTab = tabObjects.find((tab) => tab.game_id === selectedGame)
-      setSelectedTab(firstTab?.name ?? tabs[0] ?? '')
+    selectedTabRef.current = selectedTab
+  }, [selectedTab])
+
+  useEffect(() => {
+    if (!selectedGame) return
+
+    const hasInitializedGame = initializedGameRef.current === selectedGame
+    const nextVisibleTabs = tabObjects
+      .filter((tab) => tab.game_id === selectedGame)
+      .map((tab) => tab.name)
+    const fallbackTab = nextVisibleTabs[0] ?? tabs[0] ?? ''
+
+    if (!hasInitializedGame) {
+      initializedGameRef.current = selectedGame
+      setSelectedTab(fallbackTab)
+      setSelectedRarity(null)
+      return
     }
-    setSelectedRarity(null)
+
+    const currentSelectedTab = selectedTabRef.current
+    if (currentSelectedTab !== '__ALL_TABS__' && currentSelectedTab && nextVisibleTabs.includes(currentSelectedTab)) {
+      return
+    }
+
+    setSelectedTab(fallbackTab)
   }, [selectedGame, tabObjects, tabs])
 
   useEffect(() => {
