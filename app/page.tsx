@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShoppingCart } from 'lucide-react'
+import { Settings, ShoppingCart, Search, X } from 'lucide-react'
 import { FullWidthGrid } from '@/components/full-width-grid'
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { CartListModal } from '@/components/cart-list-modal'
@@ -16,6 +16,8 @@ export default function POSPage() {
   const [cartModalOpen, setCartModalOpen] = useState(false)
   const [globalAdminModalOpen, setGlobalAdminModalOpen] = useState(false)
   const [showGlobalPinOverlay, setShowGlobalPinOverlay] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const { totalQuantity } = useCart()
 
   const handleGlobalPinSuccess = () => {
@@ -23,24 +25,58 @@ export default function POSPage() {
     setGlobalAdminModalOpen(true)
   }
 
+  const handleSearchToggle = () => {
+    if (searchOpen) setSearchQuery('')
+    setSearchOpen(v => !v)
+  }
+
   return (
     <div className="flex h-screen flex-col bg-zinc-950">
       <main className="flex-1 overflow-hidden">
         <FullWidthGrid
           onCardClick={setSelectedCard}
-          onGlobalAdminClick={() => setShowGlobalPinOverlay(true)}
+          searchOpen={searchOpen}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
         />
       </main>
 
-      {/* 장바구니 플로팅 버튼 */}
+      {/* 설정 버튼 — 좌하단 */}
+      <div className="fixed bottom-6 left-6 z-30">
+        <button
+          onClick={() => setShowGlobalPinOverlay(true)}
+          className="flex h-20 w-20 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900/95 text-zinc-300 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all hover:bg-zinc-800 hover:text-white active:scale-95"
+          title="환경설정"
+        >
+          <Settings className="h-9 w-9" />
+        </button>
+      </div>
+
+      {/* 검색 버튼 — 우하단, 장바구니 위 */}
+      <div className="fixed bottom-28 right-6 z-30">
+        <button
+          onClick={handleSearchToggle}
+          className={`flex h-14 w-14 items-center justify-center rounded-full border shadow-[0_12px_32px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 ${
+            searchOpen
+              ? 'border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+              : 'border-zinc-700 bg-zinc-900/95 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+          }`}
+          title="카드 검색"
+        >
+          {searchOpen ? <X className="h-6 w-6" /> : <Search className="h-6 w-6" />}
+        </button>
+      </div>
+
+      {/* 장바구니 버튼 — 우하단 */}
       <div className="fixed bottom-6 right-6 z-30">
         <button
           onClick={() => setCartModalOpen(true)}
-          className="relative flex h-16 w-16 items-center justify-center rounded-full bg-amber-500 text-black shadow-lg transition-all hover:bg-amber-400 active:scale-95"
+          data-cart-button="true"
+          className="relative flex h-20 w-20 items-center justify-center rounded-full bg-amber-500 text-black shadow-[0_16px_40px_rgba(0,0,0,0.45)] transition-all hover:bg-amber-400 active:scale-95"
         >
-          <ShoppingCart className="h-7 w-7" />
+          <ShoppingCart className="h-9 w-9" />
           {totalQuantity > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+            <span className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
               {totalQuantity > 99 ? '99+' : totalQuantity}
             </span>
           )}

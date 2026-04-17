@@ -220,8 +220,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const isExpanded = expandedOrder === order.id
                     return (
                       <div key={order.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800/50">
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setExpandedOrder(isExpanded ? null : order.id)
+                            }
+                          }}
                           className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-zinc-800"
                         >
                           <div className="flex items-center gap-4">
@@ -264,7 +272,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             </div>
                             {isExpanded ? <ChevronUp className="h-5 w-5 text-zinc-500" /> : <ChevronDown className="h-5 w-5 text-zinc-500" />}
                           </div>
-                        </button>
+                        </div>
 
                         {isExpanded && (
                           <div className="border-t border-zinc-700 p-4">

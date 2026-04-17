@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
-import { Settings, Minus, Plus, Check, X, Save, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Settings, Minus, Plus, Check, X, Save, ShoppingCart, Trash2 } from 'lucide-react'
 import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
@@ -38,6 +38,12 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   })
 
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [cartFlyAnim, setCartFlyAnim] = useState<{
+    startX: number
+    startY: number
+    deltaX: number
+    deltaY: number
+  } | null>(null)
 
   const { addItem } = useCart()
   const { updateCard, deleteCard } = useCards()
@@ -49,6 +55,23 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
 
   const handleAddToCart = useCallback(() => {
     if (!selectedRarity || !selectedPrice) return
+
+    const addButton = document.querySelector('[data-add-to-cart-button="true"]') as HTMLElement | null
+    const cartButton = document.querySelector('[data-cart-button="true"]') as HTMLElement | null
+    if (addButton && cartButton) {
+      const addRect = addButton.getBoundingClientRect()
+      const cartRect = cartButton.getBoundingClientRect()
+      const startX = addRect.left + addRect.width / 2 - 24
+      const startY = addRect.top + addRect.height / 2 - 24
+      const targetX = cartRect.left + cartRect.width / 2 - 24
+      const targetY = cartRect.top + cartRect.height / 2 - 24
+      setCartFlyAnim({
+        startX,
+        startY,
+        deltaX: targetX - startX,
+        deltaY: targetY - startY,
+      })
+    }
 
     for (let i = 0; i < quantity; i++) {
       addItem({
@@ -63,7 +86,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
     setAdded(true)
     setTimeout(() => {
       onClose()
-    }, 400)
+    }, 420)
   }, [selectedRarity, selectedPrice, quantity, card, addItem, onClose])
 
   const handlePinSuccess = useCallback(() => {
@@ -104,6 +127,28 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
 
   return (
     <>
+      <AnimatePresence>
+        {cartFlyAnim && (
+          <motion.div
+            key="cart-fly"
+            className="pointer-events-none fixed z-[70] flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-black shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+            style={{ left: cartFlyAnim.startX, top: cartFlyAnim.startY }}
+            initial={{ opacity: 0.95, scale: 1 }}
+            animate={{
+              x: cartFlyAnim.deltaX,
+              y: cartFlyAnim.deltaY,
+              scale: 0.42,
+              opacity: 0.2,
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+            onAnimationComplete={() => setCartFlyAnim(null)}
+          >
+            <ShoppingCart className="h-6 w-6" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Backdrop - click to close */}
       <div
         className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
@@ -348,6 +393,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
               {!card.isStopped && (
                 <div className="border-t border-zinc-800 bg-zinc-900 p-4">
                   <button
+                    data-add-to-cart-button="true"
                     onClick={handleAddToCart}
                     disabled={!selectedRarity || added}
                     className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl text-lg font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed ${

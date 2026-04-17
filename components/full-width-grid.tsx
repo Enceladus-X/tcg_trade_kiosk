@@ -1,18 +1,19 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Settings, Search, X, Power } from 'lucide-react'
-import { searchCards, type CardWithStatus, type CardPrice, rarityColors, getRarityColors } from '@/lib/mock-cards'
+import { ChevronDown, Power, Search, X } from 'lucide-react'
+import { searchCards, type CardWithStatus, type CardPrice, getRarityColors } from '@/lib/mock-cards'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useGames } from '@/lib/use-games'
 import { useStoreSettings } from '@/lib/use-settings'
-import { GameNavBar } from '@/components/game-nav-bar'
 
 interface FullWidthGridProps {
   onCardClick: (card: CardWithStatus) => void
-  onGlobalAdminClick: () => void
+  searchOpen: boolean
+  searchQuery: string
+  onSearchQueryChange: (q: string) => void
 }
 
 function getActivePrices(card: CardWithStatus): CardPrice[] {
@@ -25,7 +26,7 @@ function formatPrice(price: number): string {
   return price.toLocaleString('ko-KR')
 }
 
-export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGridProps) {
+export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQueryChange }: FullWidthGridProps) {
   const { cards } = useCards()
   const { tabs, tabObjects } = useTabs()
   const { games } = useGames()
@@ -34,8 +35,9 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
   const [selectedGame, setSelectedGame] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<string>(() => tabs[0] ?? '')
   const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [tabMenuOpen, setTabMenuOpen] = useState(false)
+
+  const tabMenuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
@@ -55,8 +57,24 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
       setSelectedTab(firstTab?.name ?? tabs[0] ?? '')
     }
     setSelectedRarity(null)
-    setSearchQuery('')
   }, [selectedGame]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 탭 메뉴 outside click 닫기
+  useEffect(() => {
+    if (!tabMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (tabMenuRef.current && !tabMenuRef.current.contains(e.target as Node)) {
+        setTabMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [tabMenuOpen])
+
+  // 검색창 열릴 때 포커스
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus()
+  }, [searchOpen])
 
   // 현재 보여줄 탭 목록
   const visibleTabs = useMemo(() => {
@@ -66,15 +84,28 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
   }, [hasGames, selectedGame, tabs, tabObjects])
 
   const activeTab = visibleTabs.includes(selectedTab) ? selectedTab : (visibleTabs[0] ?? '')
+  const selectedGameName = selectedGame
+    ? (games.find((g) => g.id === selectedGame)?.name ?? null)
+    : null
+
+  const allTabsValue = '__ALL_TABS__'
+  const selectableTabs = useMemo(
+    () => [{ value: allTabsValue, label: '전체' }, ...visibleTabs.map((tab) => ({ value: tab, label: tab }))],
+    [visibleTabs]
+  )
+  const isAllTabsSelected = selectedTab === allTabsValue
+  const activeTabLabel = isAllTabsSelected ? '전체' : activeTab
 
   useEffect(() => {
-    if (searchOpen) searchInputRef.current?.focus()
-    else setSearchQuery('')
-  }, [searchOpen])
+    setTabMenuOpen(false)
+  }, [selectedTab, selectedGame])
 
-  // 현재 탭에서 실제로 존재하는 레어도만 필터 버튼 표시 (useEffect 보다 먼저 선언)
+  // 현재 탭에서 실제로 존재하는 레어도만 필터 버튼 표시
   const activeRarities = useMemo(() => {
-    const byTab = cards.filter(c => c.category === activeTab)
+    const visibleTabSet = new Set(visibleTabs)
+    const byTab = isAllTabsSelected
+      ? cards.filter(c => visibleTabSet.has(c.category))
+      : cards.filter(c => c.category === activeTab)
     const raritySet = new Set<string>()
     byTab.forEach(card => {
       card.prices.forEach(p => {
@@ -82,7 +113,7 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
       })
     })
     return globalRarities.filter(r => raritySet.has(r))
-  }, [cards, activeTab, globalRarities])
+  }, [cards, activeTab, globalRarities, isAllTabsSelected, visibleTabs])
 
   useEffect(() => {
     if (selectedRarity && !activeRarities.includes(selectedRarity)) {
@@ -91,8 +122,11 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
   }, [activeRarities]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCards = useMemo(() => {
-    const byTab = cards.filter(c => c.category === activeTab)
-    const searched = searchCards(byTab, searchQuery)
+    const visibleTabSet = new Set(visibleTabs)
+    const byTab = isAllTabsSelected
+      ? cards.filter(c => visibleTabSet.has(c.category))
+      : cards.filter(c => c.category === activeTab)
+    const searched = searchQuery ? searchCards(byTab, searchQuery) : byTab
     const byRarity = selectedRarity
       ? searched.filter(card =>
           card.enabledRarities[selectedRarity] &&
@@ -104,148 +138,195 @@ export function FullWidthGrid({ onCardClick, onGlobalAdminClick }: FullWidthGrid
         getActivePrices(card).reduce((max, p) => Math.max(max, p.price), 0)
       return maxPrice(b) - maxPrice(a)
     })
-  }, [cards, activeTab, searchQuery, selectedRarity])
+  }, [cards, activeTab, isAllTabsSelected, selectedRarity, visibleTabs, searchQuery])
 
   return (
     <div className="flex h-full flex-col">
-      {/* 매장 타이틀 배너 */}
-      <div className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-6 py-2">
-        <div className="flex items-baseline gap-3">
-          <span className="text-xl font-extrabold tracking-tight text-amber-400">
-            {hasGames && selectedGame
-              ? (() => { const n = games.find(g => g.id === selectedGame)?.name; return n ? `마린포드 ${n} 매입표` : '마린포드 매입표' })()
-              : '마린포드 싱글카드 매매표'
-            }
-          </span>
-          <span className="text-xs text-zinc-600">카드를 선택하면 매입가를 확인할 수 있습니다</span>
-        </div>
-      </div>
-
-      {/* 게임 네비게이션 바 — hasGames 이면 항상 표시 */}
-      {hasGames && (
-        <GameNavBar
-          games={games}
-          selectedGameId={selectedGame}
-          onSelect={setSelectedGame}
-        />
-      )}
-
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
-          <div className="flex items-center gap-2">
-            {searchOpen ? (
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2">
-                <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="카드 검색..."
-                  className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-white">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div
-                className="flex flex-1 gap-1 overflow-x-auto"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-              >
-                {visibleTabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setSelectedTab(tab)}
-                    className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                      activeTab === tab
-                        ? 'bg-amber-500 text-black'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => setSearchOpen(v => !v)}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
-                searchOpen
-                  ? 'border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-              }`}
-            >
-              {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-            </button>
-
-            <button
-              onClick={onGlobalAdminClick}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
-
-            {isElectron && (
-              <button
-                onClick={() => window.close()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
-                title="프로그램 종료"
-              >
-                <Power className="h-5 w-5" />
-              </button>
-            )}
+      <div className="sticky top-0 z-10 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-sm">
+        {/* 타이틀 드롭 패널 — 상단 중앙 절대 위치 */}
+        <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2">
+          <div className="w-fit max-w-[min(56vw,680px)] rounded-b-[2rem] border border-zinc-700/60 border-t-0 bg-zinc-950/84 px-8 py-3 shadow-[0_18px_34px_rgba(0,0,0,0.36)] backdrop-blur-xl">
+            <p className="truncate text-center text-[1.7rem] font-black tracking-tight text-amber-300 xl:text-[2rem]">
+              {`마린포드 ${selectedGameName ?? ''} 매입표`}
+            </p>
           </div>
         </div>
 
-      {/* 레어도 필터 바 */}
-      {activeRarities.length > 0 && (
-        <div
-          className="shrink-0 flex items-center gap-2 overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-4 py-2"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
-        >
-          <button
-            onClick={() => setSelectedRarity(null)}
-            className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-              selectedRarity === null
-                ? 'bg-amber-500 text-black'
-                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-            }`}
-          >
-            전체
-          </button>
-          {activeRarities.map(rarity => {
-            const colors = getRarityColors(rarity)
-            const isSelected = selectedRarity === rarity
-            return (
-              <button
-                key={rarity}
-                onClick={() => setSelectedRarity(isSelected ? null : rarity)}
-                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
-                  isSelected
-                    ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-                }`}
+        {/* 메인 헤더: 왼쪽(전원+탭+레어도) | 오른쪽(게임 버튼) — flex 정상 흐름 */}
+        <div className="flex items-stretch">
+          {/* 왼쪽 영역 */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* 전원 버튼 행 */}
+            <div className="flex min-h-[5rem] items-end px-3 pb-1 pt-2">
+              {isElectron && (
+                <button
+                  onClick={() => window.close()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
+                  title="프로그램 종료"
+                >
+                  <Power className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            {/* 탭 드롭다운 + 레어도 필터 행 */}
+            <div className="flex min-h-[3rem] items-center gap-2 border-t border-zinc-800/60 px-3 py-1">
+              {/* 탭 드롭다운 OR 검색 입력 */}
+              {searchOpen ? (
+                <div className="flex min-w-[220px] items-center gap-2 rounded-xl border border-amber-500/60 bg-zinc-900 px-3 py-2">
+                  <Search className="h-4 w-4 shrink-0 text-amber-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => onSearchQueryChange(e.target.value)}
+                    placeholder="카드 검색..."
+                    className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => onSearchQueryChange('')} className="text-zinc-500 hover:text-white">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="relative shrink-0" ref={tabMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setTabMenuOpen((open) => !open)}
+                    className="flex min-w-[220px] items-center justify-between rounded-xl border border-amber-400/60 bg-zinc-900 px-4 py-2 text-sm font-bold text-white shadow-[0_8px_22px_rgba(0,0,0,0.28)] transition-colors hover:border-amber-300"
+                  >
+                    <span className="truncate">{activeTabLabel || '탭 선택'}</span>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-amber-300 transition-transform ${tabMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  <AnimatePresence>
+                    {tabMenuOpen && selectableTabs.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        className="absolute left-0 top-[calc(100%+8px)] z-30 min-w-[220px] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
+                      >
+                        {selectableTabs.map((tab, index) => {
+                          const isActive = tab.value === selectedTab || (tab.value === allTabsValue && isAllTabsSelected)
+                          return (
+                            <motion.button
+                              key={tab.value}
+                              type="button"
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.02, duration: 0.12 }}
+                              onClick={() => {
+                                setSelectedTab(tab.value)
+                                setTabMenuOpen(false)
+                              }}
+                              className={`block w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                isActive ? 'bg-amber-500 text-black' : 'text-zinc-200 hover:bg-zinc-800'
+                              }`}
+                            >
+                              {tab.label}
+                            </motion.button>
+                          )
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* 레어도 필터 */}
+              <div
+                className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
               >
-                {rarity}
-              </button>
-            )
-          })}
+                <button
+                  onClick={() => setSelectedRarity(null)}
+                  className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                    selectedRarity === null
+                      ? 'bg-amber-500 text-black'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  전체
+                </button>
+                {activeRarities.map(rarity => {
+                  const colors = getRarityColors(rarity)
+                  const isSelected = selectedRarity === rarity
+                  return (
+                    <button
+                      key={rarity}
+                      onClick={() => setSelectedRarity(isSelected ? null : rarity)}
+                      className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
+                        isSelected
+                          ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      {rarity}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 오른쪽: 게임 버튼 — absolute 제거, flex 정상 흐름 */}
+          {hasGames && (
+            <div className="flex shrink-0 items-center gap-3 px-3 py-2">
+              {games.map((game) => {
+                const isSelected = game.id === selectedGame
+                const hasImage = Boolean(game.imageUrl)
+                return (
+                  <button
+                    key={game.id}
+                    type="button"
+                    onClick={() => setSelectedGame(game.id)}
+                    title={game.name}
+                    className={`flex shrink-0 items-center justify-center rounded-[1.9rem] border shadow-[0_18px_36px_rgba(0,0,0,0.42)] transition-all ${
+                      isSelected
+                        ? 'border-amber-300/90 bg-zinc-900 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_18px_36px_rgba(0,0,0,0.42)]'
+                        : 'border-zinc-700/90 bg-zinc-900/92 hover:border-zinc-500 hover:bg-zinc-900'
+                    } ${hasImage ? 'h-[5.75rem] w-[10.5rem] p-2' : 'h-[5.75rem] min-w-[148px] px-4'}`}
+                  >
+                    {hasImage ? (
+                      <div className={`flex h-full w-full items-center justify-center overflow-hidden rounded-[1.35rem] border ${
+                        isSelected ? 'border-amber-300/60' : 'border-zinc-700'
+                      } bg-zinc-800`}>
+                        <img
+                          src={game.imageUrl!}
+                          alt={game.name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <span className={`max-w-[112px] truncate text-base font-black ${
+                          isSelected ? 'text-white' : 'text-zinc-300'
+                        }`}>
+                          {game.name}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* 카드 그리드 */}
       <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`cards-${activeTab}`}
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 24 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
+            key={`cards-${selectedGame ?? 'none'}-${selectedTab}-${selectedRarity ?? 'all'}`}
+            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.99 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
           >
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
               {filteredCards.map((card, i) => (
