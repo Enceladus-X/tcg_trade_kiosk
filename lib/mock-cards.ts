@@ -24,6 +24,7 @@ export const cardCategories = [
 export type CardCategory = typeof cardCategories[number]
 
 export interface CartItem {
+  itemId?: string
   cardId: string
   cardName: string
   cardCode: string

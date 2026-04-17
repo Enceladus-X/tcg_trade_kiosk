@@ -21,6 +21,7 @@ function dbToOrder(row: DbOrder): PendingOrder {
     paymentMethod: row.payment_method,
     mileageRate: row.mileage_rate,
     items: (row.order_items ?? []).map(item => ({
+      itemId: item.id,
       cardId: item.card_id ?? '',
       cardName: item.card_name,
       cardCode: item.card_code,
@@ -122,6 +123,26 @@ export function useOrders() {
     onSuccess: invalidate,
   })
 
+  const updateItemPricesMutation = useMutation({
+    mutationFn: async ({
+      orderId,
+      itemUpdates,
+      newTotal,
+    }: {
+      orderId: string
+      itemUpdates: { itemId: string; price: number }[]
+      newTotal: number
+    }) => {
+      for (const { itemId, price } of itemUpdates) {
+        const { error } = await supabase.from('order_items').update({ price }).eq('id', itemId)
+        if (error) throw error
+      }
+      const { error } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async (orderId: string) => {
       // order_items는 ON DELETE CASCADE로 자동 삭제
@@ -150,6 +171,11 @@ export function useOrders() {
       (orderId: string, status: OrderStatus) =>
         updateStatusMutation.mutate({ orderId, status }),
       [updateStatusMutation]
+    ),
+    updateItemPrices: useCallback(
+      (orderId: string, itemUpdates: { itemId: string; price: number }[], newTotal: number) =>
+        updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal }),
+      [updateItemPricesMutation]
     ),
     deleteOrder: useCallback(
       (orderId: string) => deleteMutation.mutate(orderId),

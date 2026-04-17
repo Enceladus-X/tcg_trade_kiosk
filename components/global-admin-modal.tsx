@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User, Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check, Settings2, Coins, Pencil, ImagePlus, Loader2 } from 'lucide-react'
+import {
+  X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
+  Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
+  Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp,
+} from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useStoreSettings } from '@/lib/use-settings'
@@ -13,7 +17,7 @@ import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus } f
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
 
-// 게임 이미지 업로드 버튼 (각 게임 행에서 독립적으로 훅 인스턴스를 가져야 함)
+// 게임 이미지 업로드 버튼
 function GameImageUploadButton({ game, onUpload }: { game: Game; onUpload: (url: string) => void }) {
   const { upload, isUploading } = useImageUpload({ bucket: 'game-images', prefix: 'games' })
   const inputRef = useRef<HTMLInputElement>(null)
@@ -65,10 +69,10 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
 const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
 const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
 
-type AdminTab = 'orders' | 'add-card' | 'cards' | 'tabs' | 'games' | 'settings'
+type AdminTab = 'orders' | 'add-card' | 'cards' | 'game-tabs' | 'stats' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
-  const { orders, updateOrderStatus, deleteOrder } = useOrders()
+  const { orders, updateOrderStatus, updateItemPrices, deleteOrder } = useOrders()
   const { cards, addCard, setCardStopped } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
@@ -77,6 +81,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
+
+  // 가격 조정 상태: Record<orderId, string[]> — 인덱스별 가격 문자열
+  const [adjustedPrices, setAdjustedPrices] = useState<Record<string, string[]>>({})
+  const [savingOrderId, setSavingOrderId] = useState<string | null>(null)
 
   // 설정 탭 로컬 상태
   const [editMileagePercent, setEditMileagePercent] = useState<string>('')
@@ -87,6 +95,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
 
+  // 고객 정보 복사
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
     const text = [order.customerName, order.bankName, order.accountNumber, order.phoneNumber]
       .filter(Boolean)
@@ -109,10 +118,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [cardSearch, setCardSearch] = useState('')
   const [adminEditCard, setAdminEditCard] = useState<CardWithStatus | null>(null)
 
-  // 게임 관리 입력
+  // 게임/탭 관리 입력
   const [newGameName, setNewGameName] = useState('')
-
-  // 탭 관리 입력
   const [newTabName, setNewTabName] = useState('')
 
   // 카드 추가 실행
@@ -124,7 +131,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     const enabledRarities = Object.fromEntries(
       ALL_RARITIES.map(r => [r, newCardEnabled[r] && (newCardPrices[r] || 0) > 0])
     )
-
     addCard({
       name: newCardName.trim(),
       code: newCardCode.trim(),
@@ -134,13 +140,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       enabledRarities,
       isStopped: prices.length === 0,
     })
-
     setNewCardName('')
     setNewCardCode('')
     setNewCardImageUrl('')
     setNewCardEnabled({ ...emptyEnabled })
     setNewCardPrices({ ...emptyPrices })
     setActiveTab('orders')
+  }
+
+  // 가격 조정 저장
+  const handleSavePrices = async (order: (typeof orders)[number]) => {
+    const priceArr = adjustedPrices[order.id]
+    if (!priceArr) return
+    setSavingOrderId(order.id)
+    try {
+      const itemUpdates = order.items
+        .map((item, idx) => ({ itemId: item.itemId!, price: parseFloat(priceArr[idx]) || item.price }))
+        .filter((u, idx) => String(u.price) !== String(order.items[idx].price))
+      const newBaseTotal = order.items.reduce((sum, item, idx) => {
+        const p = parseFloat(priceArr[idx]) || item.price
+        return sum + p * item.quantity
+      }, 0)
+      const newTotal = order.mileageRate
+        ? Math.round(newBaseTotal * order.mileageRate)
+        : newBaseTotal
+      await updateItemPrices(order.id, itemUpdates, newTotal)
+    } finally {
+      setSavingOrderId(null)
+    }
   }
 
   const formatDate = (iso: string) =>
@@ -150,13 +177,36 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     ? cards.filter(c => c.name.includes(cardSearch) || c.code.includes(cardSearch))
     : cards
 
+  // 통계 계산
+  const todayStr = new Date().toDateString()
+  const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+  const todayTotal = todayOrders.reduce((sum, o) => sum + o.totalPrice, 0)
+  const todayPaidTotal = todayOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
+  const todayCashCount = todayOrders.filter(o => o.paymentMethod === 'cash').length
+  const todayMileageCount = todayOrders.filter(o => o.paymentMethod === 'mileage').length
+
+  const topCardsMap = new Map<string, { cardName: string; rarity: string; count: number; totalPrice: number }>()
+  for (const order of orders.filter(o => o.status !== 'rejected')) {
+    for (const item of order.items) {
+      const key = `${item.cardName}|${item.rarity}`
+      const existing = topCardsMap.get(key)
+      if (existing) {
+        existing.count += item.quantity
+        existing.totalPrice += item.price * item.quantity
+      } else {
+        topCardsMap.set(key, { cardName: item.cardName, rarity: item.rarity, count: item.quantity, totalPrice: item.price * item.quantity })
+      }
+    }
+  }
+  const topCards = [...topCardsMap.values()].sort((a, b) => b.count - a.count).slice(0, 10)
+
   const tabConfig: { key: AdminTab; label: string }[] = [
-    { key: 'orders',   label: '매입 요청' },
-    { key: 'add-card', label: '카드 추가' },
-    { key: 'cards',    label: '카드 관리' },
-    { key: 'tabs',     label: '탭 관리' },
-    { key: 'games',    label: '게임 관리' },
-    { key: 'settings', label: '설정' },
+    { key: 'orders',    label: '매입 요청' },
+    { key: 'add-card',  label: '카드 추가' },
+    { key: 'cards',     label: '카드 관리' },
+    { key: 'game-tabs', label: '게임/탭' },
+    { key: 'stats',     label: '통계' },
+    { key: 'settings',  label: '설정' },
   ]
 
   return (
@@ -218,16 +268,42 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   {orders.map((order) => {
                     const status = statusConfig[order.status]
                     const isExpanded = expandedOrder === order.id
+                    const priceArr = adjustedPrices[order.id]
+                    const pricesChanged = priceArr
+                      ? order.items.some((item, idx) => {
+                          const v = priceArr[idx]
+                          return v !== undefined && v !== '' && parseFloat(v) !== item.price
+                        })
+                      : false
+
                     return (
                       <div key={order.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800/50">
                         <div
                           role="button"
                           tabIndex={0}
-                          onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                          onClick={() => {
+                            if (isExpanded) {
+                              setExpandedOrder(null)
+                            } else {
+                              setExpandedOrder(order.id)
+                              setAdjustedPrices(prev => ({
+                                ...prev,
+                                [order.id]: order.items.map(item => String(item.price)),
+                              }))
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault()
-                              setExpandedOrder(isExpanded ? null : order.id)
+                              if (isExpanded) {
+                                setExpandedOrder(null)
+                              } else {
+                                setExpandedOrder(order.id)
+                                setAdjustedPrices(prev => ({
+                                  ...prev,
+                                  [order.id]: order.items.map(item => String(item.price)),
+                                }))
+                              }
                             }
                           }}
                           className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-zinc-800"
@@ -277,37 +353,74 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         {isExpanded && (
                           <div className="border-t border-zinc-700 p-4">
                             <div className="mb-4 space-y-2">
-                              <p className="text-xs font-medium text-zinc-500">매입 품목</p>
+                              <p className="text-xs font-medium text-zinc-500">매입 품목 (가격 수정 가능)</p>
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
                                 const cardImg = item.cardId
                                   ? cards.find(c => c.id === item.cardId)?.imageUrl
                                   : undefined
+                                const currentVal = priceArr?.[idx] ?? String(item.price)
                                 return (
-                                  <div key={idx} className="flex items-center justify-between rounded-lg bg-zinc-900 p-2">
-                                    <div className="flex items-center gap-2">
-                                      {/* 카드 썸네일 */}
-                                      <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
-                                        {cardImg ? (
-                                          <img
-                                            src={cardImg}
-                                            alt={item.cardName}
-                                            className="h-full w-full object-contain"
-                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                                          />
-                                        ) : (
-                                          <div className="h-full w-full" />
-                                        )}
-                                      </div>
-                                      <span className={`rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
-                                      <span className="text-sm text-white">{item.cardName}</span>
-                                      <span className="text-xs text-zinc-500">x{item.quantity}</span>
+                                  <div key={idx} className="flex items-center gap-2 rounded-lg bg-zinc-900 p-2">
+                                    {/* 카드 썸네일 */}
+                                    <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
+                                      {cardImg ? (
+                                        <img
+                                          src={cardImg}
+                                          alt={item.cardName}
+                                          className="h-full w-full object-contain"
+                                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                        />
+                                      ) : (
+                                        <div className="h-full w-full" />
+                                      )}
                                     </div>
-                                    <span className="text-sm font-medium text-zinc-300">{formatPrice(item.price * item.quantity)}</span>
+                                    <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
+                                    <span className="min-w-0 flex-1 truncate text-sm text-white">{item.cardName}</span>
+                                    <span className="shrink-0 text-xs text-zinc-500">x{item.quantity}</span>
+                                    {/* 가격 수정 입력 */}
+                                    <div className="flex shrink-0 items-center gap-1">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="100"
+                                        value={currentVal}
+                                        onChange={(e) => setAdjustedPrices(prev => {
+                                          const arr = [...(prev[order.id] ?? order.items.map(i => String(i.price)))]
+                                          arr[idx] = e.target.value
+                                          return { ...prev, [order.id]: arr }
+                                        })}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`w-24 rounded-lg border bg-zinc-800 px-2 py-1 text-right text-sm font-medium focus:outline-none ${
+                                          parseFloat(currentVal) !== item.price
+                                            ? 'border-amber-500 text-amber-400'
+                                            : 'border-zinc-700 text-zinc-300'
+                                        }`}
+                                      />
+                                      <span className="text-xs text-zinc-600">원</span>
+                                    </div>
                                   </div>
                                 )
                               })}
                             </div>
+
+                            {/* 저장 버튼 */}
+                            {pricesChanged && (
+                              <div className="mb-3">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleSavePrices(order) }}
+                                  disabled={savingOrderId === order.id}
+                                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500/20 py-2 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+                                >
+                                  {savingOrderId === order.id
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <Check className="h-4 w-4" />
+                                  }
+                                  조정 가격 저장
+                                </button>
+                              </div>
+                            )}
+
                             <div className="flex gap-2">
                               {order.status === 'pending' && (
                                 <>
@@ -411,7 +524,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {/* ── 카드 관리 ── */}
           {activeTab === 'cards' && (
             <div className="p-6">
-              {/* 검색 */}
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2">
                 <Search className="h-4 w-4 shrink-0 text-zinc-500" />
                 <input
@@ -432,7 +544,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     key={card.id}
                     className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-3 transition-colors hover:border-zinc-700 hover:bg-zinc-800/70"
                   >
-                    {/* 썸네일 */}
                     <div className="h-12 w-9 shrink-0 overflow-hidden rounded-lg bg-zinc-700">
                       <img
                         src={card.imageUrl}
@@ -441,8 +552,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.svg' }}
                       />
                     </div>
-
-                    {/* 정보 */}
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-white">{card.name}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -461,8 +570,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         })}
                       </div>
                     </div>
-
-                    {/* 수정 버튼 */}
                     <button
                       onClick={() => setAdminEditCard(card)}
                       className="flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-700/60 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
@@ -470,8 +577,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       <Pencil className="h-3.5 w-3.5" />
                       수정
                     </button>
-
-                    {/* 매입 중지 / 재개 토글 */}
                     <button
                       onClick={() => setCardStopped(card.id, !card.isStopped)}
                       className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
@@ -487,6 +592,257 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 게임/탭 관리 ── */}
+          {activeTab === 'game-tabs' && (
+            <div className="p-6">
+              <div className="mx-auto max-w-lg space-y-8">
+
+                {/* ---- 탭(확장팩) 관리 ---- */}
+                <div className="space-y-4">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <Layers className="h-4 w-4 text-zinc-400" />
+                    확장팩 탭 관리
+                  </h3>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTabName}
+                      onChange={(e) => setNewTabName(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && newTabName.trim()) {
+                          try {
+                            await addTab(newTabName.trim())
+                            setNewTabName('')
+                          } catch (err) {
+                            console.error('[탭 추가 실패]', err)
+                          }
+                        }
+                      }}
+                      placeholder="새 확장팩명 (예: 버스트 오브 데스티니)"
+                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (newTabName.trim()) {
+                          try {
+                            await addTab(newTabName.trim())
+                            setNewTabName('')
+                          } catch (err) {
+                            console.error('[탭 추가 실패]', err)
+                          }
+                        }
+                      }}
+                      disabled={!newTabName.trim() || isAddingTab}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {addTabError && (
+                    <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-400">
+                      오류: {(addTabError as Error).message}
+                    </p>
+                  )}
+
+                  <div className="space-y-2">
+                    {tabs.length === 0 && (
+                      <p className="py-8 text-center text-sm text-zinc-500">등록된 탭이 없습니다</p>
+                    )}
+                    {tabs.map((tab) => (
+                      <div
+                        key={tab}
+                        className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Layers className="h-4 w-4 text-zinc-500" />
+                          <span className="font-medium text-white">{tab}</span>
+                          <span className="text-xs text-zinc-500">
+                            {cards.filter(c => c.category === tab).length}장
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removeTab(tab)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-zinc-600">
+                    * 탭 삭제 시 해당 탭의 카드는 숨겨집니다. 탭을 다시 추가하면 복원됩니다.
+                  </p>
+                </div>
+
+                <div className="border-t border-zinc-800" />
+
+                {/* ---- 게임 대분류 관리 ---- */}
+                <div className="space-y-4">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <TrendingUp className="h-4 w-4 text-zinc-400" />
+                    게임 대분류 관리
+                  </h3>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newGameName}
+                      onChange={(e) => setNewGameName(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && newGameName.trim()) {
+                          await addGame(newGameName.trim())
+                          setNewGameName('')
+                        }
+                      }}
+                      placeholder="예: 유희왕, 포켓몬카드"
+                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newGameName.trim()) return
+                        await addGame(newGameName.trim())
+                        setNewGameName('')
+                      }}
+                      disabled={isAddingGame || !newGameName.trim()}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {games.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-zinc-500">등록된 게임이 없습니다</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {games.map((game) => (
+                        <div key={game.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
+                          <GameImageUploadButton
+                            game={game}
+                            onUpload={(url) => updateGameImage(game.id, url)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white">{game.name}</p>
+                            <p className="text-xs text-zinc-500">
+                              {tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeGame(game.id)}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 탭-게임 배정 */}
+                  {games.length > 0 && tabs.length > 0 && (
+                    <>
+                      <div className="border-t border-zinc-800" />
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-zinc-300">탭 → 게임 배정</label>
+                        <p className="text-xs text-zinc-600">각 탭(소분류)을 게임 대분류에 배정하세요</p>
+                        <div className="space-y-2">
+                          {tabObjects.map((tab) => (
+                            <div key={tab.name} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-2.5">
+                              <span className="flex-1 text-sm font-medium text-white">{tab.name}</span>
+                              <select
+                                value={tab.game_id ?? ''}
+                                onChange={(e) => assignTabToGame(tab.name, e.target.value || null)}
+                                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-amber-500 focus:outline-none"
+                              >
+                                <option value="">미배정</option>
+                                {games.map(g => (
+                                  <option key={g.id} value={g.id}>{g.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* ── 통계 ── */}
+          {activeTab === 'stats' && (
+            <div className="p-6">
+              <div className="mx-auto max-w-lg space-y-6">
+
+                {/* 오늘 요약 */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <BarChart2 className="h-4 w-4 text-amber-400" />
+                    오늘 매입 현황
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
+                      <p className="text-xs text-zinc-500">오늘 요청 총액</p>
+                      <p className="mt-1 text-2xl font-bold text-white">{formatPrice(todayTotal)}</p>
+                      <p className="mt-0.5 text-xs text-zinc-600">{todayOrders.length}건</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
+                      <p className="text-xs text-zinc-500">오늘 지급 완료</p>
+                      <p className="mt-1 text-2xl font-bold text-emerald-400">{formatPrice(todayPaidTotal)}</p>
+                      <p className="mt-0.5 text-xs text-zinc-600">{todayOrders.filter(o => o.status === 'paid').length}건</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
+                      <p className="text-xs text-zinc-500">현금 매입</p>
+                      <p className="mt-1 text-2xl font-bold text-amber-400">{todayCashCount}건</p>
+                    </div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
+                      <p className="text-xs text-zinc-500">마일리지 매입</p>
+                      <p className="mt-1 text-2xl font-bold text-emerald-400">{todayMileageCount}건</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-zinc-800" />
+
+                {/* 인기 카드 */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <TrendingUp className="h-4 w-4 text-violet-400" />
+                    인기 매입 카드 TOP 10
+                    <span className="text-xs font-normal text-zinc-600">(전체 기간, 거절 제외)</span>
+                  </h3>
+                  {topCards.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-zinc-500">데이터 없음</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {topCards.map((item, rank) => {
+                        const colors = getRarityColors(item.rarity)
+                        return (
+                          <div key={`${item.cardName}|${item.rarity}`} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-2.5">
+                            <span className={`w-6 shrink-0 text-center text-sm font-bold ${rank < 3 ? 'text-amber-400' : 'text-zinc-600'}`}>
+                              {rank + 1}
+                            </span>
+                            <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{item.cardName}</span>
+                            <div className="flex shrink-0 flex-col items-end text-right">
+                              <span className="text-sm font-bold text-zinc-200">{item.count}장</span>
+                              <span className="text-xs text-zinc-500">{formatPrice(item.totalPrice)}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
           )}
@@ -539,7 +895,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
                 <div className="border-t border-zinc-800" />
 
-                {/* 마일리지 지급 비율 (% 표기) */}
+                {/* 마일리지 지급 비율 */}
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Coins className="h-4 w-4 text-emerald-400" />
@@ -588,7 +944,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     활성 레어도 관리
                   </label>
 
-                  {/* 현재 레어도 목록 */}
                   <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-3">
                     {globalRarities.length === 0 ? (
                       <p className="py-2 text-center text-sm text-zinc-500">등록된 레어도 없음</p>
@@ -613,7 +968,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     )}
                   </div>
 
-                  {/* 새 레어도 추가 */}
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -649,187 +1003,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             </div>
           )}
 
-          {/* ── 게임 관리 ── */}
-          {activeTab === 'games' && (
-            <div className="p-6">
-              <div className="mx-auto max-w-lg space-y-6">
-
-                {/* 새 게임 추가 */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-300">게임 대분류 추가</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newGameName}
-                      onChange={(e) => setNewGameName(e.target.value)}
-                      onKeyDown={async (e) => {
-                        if (e.key === 'Enter' && newGameName.trim()) {
-                          await addGame(newGameName.trim())
-                          setNewGameName('')
-                        }
-                      }}
-                      placeholder="예: 유희왕, 포켓몬카드"
-                      className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!newGameName.trim()) return
-                        await addGame(newGameName.trim())
-                        setNewGameName('')
-                      }}
-                      disabled={isAddingGame || !newGameName.trim()}
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
-                    >
-                      <Plus className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* 게임 목록 */}
-                {games.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-zinc-500">등록된 게임이 없습니다</p>
-                ) : (
-                  <div className="space-y-2">
-                    {games.map((game) => (
-                      <div key={game.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3">
-                        {/* 이미지 업로드 버튼 */}
-                        <GameImageUploadButton
-                          game={game}
-                          onUpload={(url) => updateGameImage(game.id, url)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-white">{game.name}</p>
-                          <p className="text-xs text-zinc-500">
-                            {tabObjects.filter(t => t.game_id === game.id).length}개 탭 연결됨
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => removeGame(game.id)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 탭-게임 배정 */}
-                {games.length > 0 && tabs.length > 0 && (
-                  <>
-                    <div className="border-t border-zinc-800" />
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-zinc-300">탭 → 게임 배정</label>
-                      <p className="text-xs text-zinc-600">각 탭(소분류)을 게임 대분류에 배정하세요</p>
-                      <div className="space-y-2">
-                        {tabObjects.map((tab) => (
-                          <div key={tab.name} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-2.5">
-                            <span className="flex-1 text-sm font-medium text-white">{tab.name}</span>
-                            <select
-                              value={tab.game_id ?? ''}
-                              onChange={(e) => assignTabToGame(tab.name, e.target.value || null)}
-                              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white focus:border-amber-500 focus:outline-none"
-                            >
-                              <option value="">미배정</option>
-                              {games.map(g => (
-                                <option key={g.id} value={g.id}>{g.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── 탭 관리 ── */}
-          {activeTab === 'tabs' && (
-            <div className="p-6">
-              <div className="mx-auto max-w-lg space-y-4">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTabName}
-                    onChange={(e) => setNewTabName(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Enter' && newTabName.trim()) {
-                        try {
-                          await addTab(newTabName.trim())
-                          setNewTabName('')
-                        } catch (err) {
-                          console.error('[탭 추가 실패]', err)
-                        }
-                      }
-                    }}
-                    placeholder="새 확장팩명 (예: 버스트 오브 데스티니)"
-                    className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={async () => {
-                      if (newTabName.trim()) {
-                        try {
-                          await addTab(newTabName.trim())
-                          setNewTabName('')
-                        } catch (err) {
-                          console.error('[탭 추가 실패]', err)
-                        }
-                      }
-                    }}
-                    disabled={!newTabName.trim() || isAddingTab}
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                </div>
-
-                {/* Supabase 연결 오류 표시 */}
-                {addTabError && (
-                  <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-400">
-                    오류: {(addTabError as Error).message}
-                  </p>
-                )}
-
-                <div className="space-y-2">
-                  {tabs.length === 0 && (
-                    <p className="py-8 text-center text-sm text-zinc-500">등록된 탭이 없습니다</p>
-                  )}
-                  {tabs.map((tab) => (
-                    <div
-                      key={tab}
-                      className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Layers className="h-4 w-4 text-zinc-500" />
-                        <span className="font-medium text-white">{tab}</span>
-                        <span className="text-xs text-zinc-500">
-                          {cards.filter(c => c.category === tab).length}장
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => removeTab(tab)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <p className="text-xs text-zinc-600">
-                  * 탭 삭제 시 해당 탭의 카드는 숨겨집니다. 탭을 다시 추가하면 복원됩니다.
-                </p>
-              </div>
-            </div>
-          )}
-
         </div>
       </motion.div>
       </div>
 
-      {/* 카드 수정 모달 (PIN 없이 직접 편집) */}
+      {/* 카드 수정 모달 */}
       {adminEditCard && (
         <CardDetailModal
           card={adminEditCard}
