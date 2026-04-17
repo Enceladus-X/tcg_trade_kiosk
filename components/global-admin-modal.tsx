@@ -6,7 +6,7 @@ import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
   Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
-  MessageSquare, Table2,
+  MessageSquare, Table2, Download,
 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
@@ -305,6 +305,40 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     } finally {
       setBulkSaving(false)
     }
+  }
+
+  const handleBulkExportCsv = () => {
+    if (bulkTabCards.length === 0) return
+
+    const escapeCsv = (value: string | number) => {
+      const text = String(value ?? '')
+      return `"${text.replace(/"/g, '""')}"`
+    }
+
+    const header = ['카드명', '코드', ...bulkRarities]
+    const rows = bulkTabCards.map((card) => {
+      const priceColumns = bulkRarities.map((rarity) => {
+        const edited = bulkEdits[card.id]?.[rarity]
+        if (edited !== undefined) return edited
+        const existing = card.prices.find((price) => price.rarity === rarity)
+        return existing ? String(existing.price) : ''
+      })
+      return [card.name, card.code, ...priceColumns]
+    })
+
+    const csv = [header, ...rows]
+      .map((row) => row.map(escapeCsv).join(','))
+      .join('\r\n')
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `tcg_prices_${effectiveBulkTab || 'all'}_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const formatDate = (iso: string) =>
@@ -879,6 +913,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       </div>
 
                       {/* 저장 버튼 */}
+                      <button
+                        onClick={handleBulkExportCsv}
+                        className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/12 py-3 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                      >
+                        <Download className="h-4 w-4" />
+                        CSV 내보내기
+                      </button>
                       <button
                         onClick={handleBulkSave}
                         disabled={bulkChangedCount === 0 || bulkSaving}

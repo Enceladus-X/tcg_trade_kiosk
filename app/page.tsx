@@ -58,14 +58,14 @@ export default function POSPage() {
           onClick={handleSearchToggle}
           aria-label="카드 검색"
           data-testid="search-button"
-          className={`flex h-14 w-14 items-center justify-center rounded-full border shadow-[0_12px_32px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 ${
+          className={`flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border-2 shadow-[0_18px_42px_rgba(0,0,0,0.48)] backdrop-blur-md transition-all active:scale-95 ${
             searchOpen
-              ? 'border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
-              : 'border-zinc-700 bg-zinc-900/95 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+              ? 'border-cyan-300 bg-cyan-400 text-zinc-950 hover:bg-cyan-300'
+              : 'border-cyan-500/80 bg-cyan-500/18 text-cyan-200 hover:border-cyan-300 hover:bg-cyan-400/28 hover:text-white'
           }`}
           title="카드 검색"
         >
-          {searchOpen ? <X className="h-6 w-6" /> : <Search className="h-6 w-6" />}
+          {searchOpen ? <X className="h-7 w-7" /> : <Search className="h-7 w-7" />}
         </button>
       </div>
 

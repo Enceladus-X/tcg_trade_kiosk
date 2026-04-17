@@ -6,9 +6,28 @@ import { supabase } from './supabase'
 import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus } from './mock-cards'
 import { type DbOrder } from './database.types'
 
+const LOCAL_ORDER_ITEM_NOTES_KEY = 'tcg-trade-kiosk.order-item-notes'
+
+function readLocalOrderItemNotes(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(LOCAL_ORDER_ITEM_NOTES_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeLocalOrderItemNotes(notesByItemId: Record<string, string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(LOCAL_ORDER_ITEM_NOTES_KEY, JSON.stringify(notesByItemId))
+}
+
 // --- 타입 변환 ---
 
-function dbToOrder(row: DbOrder): PendingOrder {
+function dbToOrder(row: DbOrder, localNotesByItemId: Record<string, string>): PendingOrder {
   return {
     id: row.id,
     createdAt: row.created_at,
@@ -28,7 +47,7 @@ function dbToOrder(row: DbOrder): PendingOrder {
       rarity: item.rarity,
       price: item.price,
       quantity: item.quantity,
-      note: 'note' in item ? item.note ?? null : null,
+      note: ('note' in item ? item.note : undefined) ?? localNotesByItemId[item.id] ?? null,
     })),
   }
 }
@@ -54,7 +73,8 @@ export function useOrders() {
         .select('*, order_items(*)')
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data as DbOrder[]).map(dbToOrder)
+      const localNotesByItemId = readLocalOrderItemNotes()
+      return (data as DbOrder[]).map((row) => dbToOrder(row, localNotesByItemId))
     },
   })
 
@@ -110,6 +130,7 @@ export function useOrders() {
           rarity: item.rarity,
           price: item.price,
           quantity: item.quantity,
+          note: item.note ?? null,
         }))
       )
       if (itemsError) throw itemsError
@@ -140,6 +161,7 @@ export function useOrders() {
       itemUpdates: { itemId: string; price: number; note?: string | null }[]
       newTotal: number
     }) => {
+      const localNotesByItemId = readLocalOrderItemNotes()
       for (const { itemId, price, note } of itemUpdates) {
         const patch: { price: number; note?: string | null } = { price }
         if (note !== undefined) patch.note = note
@@ -149,9 +171,15 @@ export function useOrders() {
           ;({ error } = await supabase.from('order_items').update({ price }).eq('id', itemId))
         }
         if (error) throw error
+
+        if (note !== undefined) {
+          if (note === null || note === '') delete localNotesByItemId[itemId]
+          else localNotesByItemId[itemId] = note
+        }
       }
       const { error } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
       if (error) throw error
+      writeLocalOrderItemNotes(localNotesByItemId)
     },
     onSuccess: invalidate,
   })
