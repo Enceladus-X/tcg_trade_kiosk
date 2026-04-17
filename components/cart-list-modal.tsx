@@ -6,7 +6,6 @@ import { useCart } from '@/lib/use-cart'
 import { useOrders } from '@/lib/use-orders'
 import { useStoreSettings } from '@/lib/use-settings'
 import { rarityColors, formatPrice, type CheckoutFormData } from '@/lib/mock-cards'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useState, useMemo } from 'react'
 
 interface CartListModalProps {
@@ -95,7 +94,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
         {/* Checkout Form */}
         {step === 'checkout' && (
           <>
-            <div className="flex items-center gap-3 border-b border-zinc-800 px-6 py-4">
+            <div className="shrink-0 flex items-center gap-3 border-b border-zinc-800 px-6 py-4">
               <button
                 onClick={() => setStep('list')}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
@@ -108,7 +107,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
               <div className="space-y-5">
 
                 {/* Payment Method Toggle */}
@@ -245,7 +244,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
               </div>
             </div>
 
-            <div className="border-t border-zinc-800 p-6">
+            <div className="shrink-0 border-t border-zinc-800 p-6">
               <button
                 onClick={handleSubmit}
                 className={`flex h-14 w-full items-center justify-center gap-2 rounded-xl text-lg font-semibold text-black transition-all hover:opacity-90 active:scale-[0.98] ${
@@ -261,7 +260,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
         {/* Cart List */}
         {step === 'list' && (
           <>
-            <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
+            <div className="shrink-0 flex items-center justify-between border-b border-zinc-800 px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
                   <ShoppingBag className="h-5 w-5 text-amber-500" />
@@ -283,7 +282,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
               )}
             </div>
 
-            <ScrollArea className="flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {items.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800">
@@ -355,10 +354,10 @@ export function CartListModal({ onClose }: CartListModalProps) {
                   })}
                 </div>
               )}
-            </ScrollArea>
+            </div>
 
             {items.length > 0 && (
-              <div className="border-t border-zinc-800 p-6">
+              <div className="shrink-0 border-t border-zinc-800 p-6">
                 <div className="mb-4 flex items-baseline justify-between">
                   <span className="text-lg text-zinc-400">총 매입가</span>
                   <span className="text-3xl font-bold text-amber-500">
