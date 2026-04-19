@@ -1,165 +1,326 @@
-# TCG Trade Kiosk - 핸드오버 문서
+# TCG Trade Kiosk - Handover
 
-최종 업데이트: 2026-04-15
-
----
-
-## 프로젝트 개요
-
-유희왕 싱글카드 매입 키오스크. Electron + Next.js(static export) 기반 Windows 포터블 앱.
-멀티 PC 실시간 동기화를 위해 Supabase(BaaS)로 마이그레이션 완료.
+최종 업데이트: 2026-04-19  
+현재 기준 버전: `v0.5.0`
 
 ---
 
-## 기술 스택
+## 1. 프로젝트 개요
 
-| 레이어 | 기술 |
+마린포드 매장에서 사용하는 TCG 싱글카드 매입 키오스크입니다.
+
+이 프로젝트는 크게 두 축으로 동작합니다.
+
+- 고객용 키오스크 화면
+  - 게임 선택
+  - 확장팩 / 레어도 / 검색 기반 카드 탐색
+  - 카드별 매입가 확인
+  - 장바구니 입력
+  - 현금 / 마일리지 지급 방식 선택
+  - 고객 정보 입력 후 매입 요청 제출
+- 관리자 화면
+  - 주문 검색 / 상태 처리
+  - 가격 조정 / 조정 사유 입력
+  - 견적서 / 영수증 출력
+  - 카드 관리 / 일괄 편집 / CSV
+  - 게임 / 탭 관리
+  - 설정 / 마일리지 / 글로벌 레어도 관리
+
+배포 방식은 Electron 기반 Windows 포터블 실행 파일입니다.
+
+---
+
+## 2. 현재 상태 요약
+
+현재 저장소 기준 상태:
+
+- 최신 릴리스: `v0.5.0`
+- 최신 릴리스 파일명: `dist/MarinfordKiosk_v0.5.0.exe`
+- GitHub Releases 정리 완료
+- `release-notes/` 폴더에 `v0.1.0`부터 `v0.5.0`까지 문서 정리 완료
+- README는 공개용 수준으로 정리 완료
+- 이 `HANDOVER.md`는 내부 인수인계용 기준 문서
+
+최근에 정리된 큰 축은 아래와 같습니다.
+
+- 메인 키오스크 화면 UI 재설계
+- 관리자 대시보드 기능 확장
+- 견적서 / 영수증 출력 추가
+- 가격 조정 사유 / 가격 조정 이력 구조 추가
+- 카드 관리 CSV 가져오기 / 내보내기 정비
+- 게임 / 탭 / 카드 이미지 관리 흐름 정리
+- 다수의 UI/상태 동기화/하이드레이션 오류 수정
+
+---
+
+## 3. 기술 스택
+
+| 영역 | 기술 |
 |---|---|
-| 프레임워크 | Next.js 16 (static export) + React 19 |
-| 데스크톱 래퍼 | Electron 33 (Windows portable .exe) |
-| UI | Tailwind CSS v4 + shadcn/ui (Radix UI) |
+| 프레임워크 | Next.js 16 + React 19 |
+| 데스크톱 앱 | Electron 33 |
+| UI | Tailwind CSS 4 + Radix UI 계열 컴포넌트 |
+| 상태 관리 | TanStack Query v5 + Zustand |
+| 애니메이션 | Framer Motion |
+| 백엔드 | Supabase |
 | 언어 | TypeScript 5.7 |
-| 패키지 매니저 | pnpm 10 |
-| 백엔드 | Supabase (PostgreSQL + Storage + Realtime) |
-| 서버 상태 관리 | TanStack Query (React Query) v5 |
+| 패키지 매니저 | pnpm |
 
 ---
 
-## 환경 설정
+## 4. 핵심 디렉토리 구조
 
-### .env.local (프로젝트 루트, git 제외)
-```
-NEXT_PUBLIC_SUPABASE_URL=https://ramfspcoxshnrxnvqkio.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+```text
+tcg_trade_kiosk/
+├── app/
+├── components/
+├── electron/
+├── lib/
+├── public/
+├── release-notes/
+├── _scripts/
+├── build/
+├── dist/
+├── README.md
+└── HANDOVER.md
 ```
 
-### 개발 서버
-```bash
-pnpm dev
-```
+### 주요 파일
 
-### Electron 빌드
-```bash
-pnpm electron:build
-```
+#### `app/page.tsx`
+
+- 메인 화면 진입점
+- 플로팅 버튼
+- 검색 상태
+- 장바구니 / 관리자 모달 / 상세 모달 라우팅
+
+#### `components/full-width-grid.tsx`
+
+- 고객용 카드 탐색 화면 핵심
+- 게임 선택 상태
+- 탭 드롭다운
+- 레어도 필터
+- 카드 그리드 렌더링
+- 필터 / 탭 전환 애니메이션
+
+#### `components/card-detail-modal.tsx`
+
+- 카드 상세 모달
+- 레어도 선택
+- 수량 선택
+- 장바구니 추가
+- 장바구니 플라이트 애니메이션
+
+#### `components/cart-list-modal.tsx`
+
+- 장바구니 목록
+- 결제 방식 선택
+- 고객 정보 입력
+- 주문 제출
+
+#### `components/global-admin-modal.tsx`
+
+- 관리자 대시보드 핵심 파일
+- 주문 검색 / 필터 / 상태 처리
+- 가격 조정 UI
+- 가격 조정 사유 / 이력 표시
+- 견적서 / 영수증 출력
+- 카드 관리
+- 카드 일괄 편집
+- CSV 가져오기 / 내보내기
+- 게임 / 탭 관리
+- 통계 / 설정
+
+현재 프로젝트에서 가장 복잡하고, 다음 작업자가 가장 먼저 읽어야 할 파일입니다.
+
+#### `lib/use-orders.ts`
+
+- 주문 생성
+- 주문 조회
+- 주문 상태 변경
+- 가격 조정 저장
+- 가격 조정 이력 조회
+
+#### `lib/use-cards.ts`
+
+- 카드 / 탭 데이터 로딩
+- 카드 CRUD
+- 카드 일괄 편집 관련 흐름
+
+#### `lib/use-games.ts`
+
+- 게임 대분류 로딩 / CRUD
+
+#### `lib/use-settings.ts`
+
+- 관리자 설정 로딩 / 저장
+- 마일리지 배율
+- 글로벌 레어도 관리
+
+#### `_scripts/order_item_adjustments.sql`
+
+- 가격 조정 이력 테이블 생성용 SQL
 
 ---
 
-## Supabase 구성
+## 5. 핵심 기능 현황
 
-### 데이터베이스 테이블
+### 고객 화면
 
-| 테이블 | 용도 |
-|---|---|
-| `tabs` | 카테고리 탭 (확장팩명) |
-| `cards` | 카드 정보. `prices`, `enabled_rarities`는 JSONB |
-| `orders` | 주문 헤더 |
-| `order_items` | 주문 항목 (orders와 1:N, ON DELETE CASCADE) |
+- 게임 선택
+- 탭 드롭다운 + `전체`
+- 레어도 필터
+- 카드 검색
+- 카드 상세 모달
+- 장바구니
+- 현금 / 마일리지 선택
+- 고객 정보 입력
+- 주문 제출
+- 동기화 상태 칩
 
-스키마 SQL: `_scripts/supabase_schema.sql`
+### 관리자 화면
 
-### Storage
-
-- 버킷: `card-images` (Public)
-- 경로: `cards/{CARD_CODE}.png`
-- 업로드 정책: anon INSERT/UPDATE 허용
-
-### Realtime
-
-`providers.tsx`의 `<RealtimeSubscriptions />` 컴포넌트가 앱 마운트 시 한 번만 구독.
-cards / tabs / orders 테이블 변경 시 TanStack Query 캐시 자동 무효화.
-
----
-
-## 아키텍처
-
-```
-app/
-  layout.tsx          - <Providers> 적용
-  providers.tsx       - QueryClientProvider + Realtime 구독 (단일 마운트)
-  page.tsx            - POSPage 루트
-
-lib/
-  supabase.ts         - Supabase 클라이언트 (싱글톤)
-  query-client.ts     - TanStack Query 클라이언트 (staleTime 30s)
-  database.types.ts   - Supabase DB 행 타입 (snake_case)
-  use-cards.ts        - useCards() / useTabs() (Supabase + TanStack Query)
-  use-orders.ts       - useOrders() (Supabase + TanStack Query)
-  use-cart.ts         - 장바구니 (클라이언트 로컬, 동기화 불필요)
-  use-image-upload.ts - Supabase Storage 업로드 훅
-  mock-cards.ts       - 타입 정의 + 초기 카드 데이터 (마이그레이션 소스)
-
-components/
-  full-width-grid.tsx     - 카드 그리드 (최고가 정렬, 레어도별 가격 오버레이)
-  card-detail-modal.tsx   - 카드 상세 / 편집
-  global-admin-modal.tsx  - 관리자 대시보드 (주문/카드/탭 관리)
-  image-upload-field.tsx  - 이미지 업로드 UI 컴포넌트
-
-_scripts/
-  supabase_schema.sql  - DB 초기화 SQL (Supabase 대시보드에서 1회 실행)
-  migrate.ts           - 초기 데이터 일괄 마이그레이션 (1회용)
-  remap-images.ts      - 이미지-카드 코드 재매핑 (정렬 오류 수정용)
-```
+- 관리자 인증 진입
+- 주문 검색
+- 주문 상태 처리
+- 고객 정보 복사
+- 견적서 출력
+- 영수증 출력
+- 가격 직접 수정
+- 감가 퍼센트 조정
+- 가격 조정 사유 입력
+- 가격 조정 이력 조회
+- 카드 CRUD
+- 카드 이미지 업로드
+- 카드 매입 중지 / 재개
+- 카드 일괄 편집
+- CSV 가져오기 / 내보내기
+- 게임 / 탭 관리
+- 통계 범위 토글
+- 관리자 비밀번호 변경
+- 마일리지 배율 설정
+- 글로벌 레어도 관리
 
 ---
 
-## 데이터 흐름
+## 6. Supabase 기준 메모
 
-```
-고객:
-  카드 그리드 → 카드 클릭 → 레어도/수량 선택 → 장바구니 → 결제 정보 입력
-  → useOrders.createOrder() → Supabase orders + order_items INSERT
-  → Realtime → 관리자 화면 즉시 반영
+핸드오버 기준으로 현재 코드가 기대하는 핵심 범주는 아래입니다.
 
-관리자 (PIN 인증 후):
-  주문 관리: 상태 변경 (대기 → 승인 → 지급완료)
-  카드 관리: 가격 수정, 레어도 토글, 매입 중지
-  탭 관리:   확장팩 추가/삭제
-  카드 추가: 이미지 파일 선택 → Supabase Storage → DB image_url 저장
-```
+- 카드 데이터
+- 탭 데이터
+- 게임 데이터
+- 주문 / 주문 아이템
+- 설정 데이터
+- 가격 조정 이력
 
----
+현재 운영 환경에서는 아래가 이미 검증된 상태였습니다.
 
-## 카드 그리드 UI
+- 가격 조정 이력 테이블 사용 가능
+- 주문 메모 필드 사용 가능
+- 게임 이미지 사용 가능
+- 탭-게임 연결 사용 가능
+- 설정 row 존재
 
-- **정렬**: 활성 매입가 최고가 기준 내림차순 (매입 중지 카드 자동 후순위)
-- **가격 오버레이**: 카드 우측 하단 고정, 비싼 순서로 위에 배치
-- **레어도별 색상**:
+주의:
 
-| 레어도 | 뱃지 | 가격 텍스트 |
-|---|---|---|
-| N | 회색 | 연회색 |
-| R | 파랑 | 하늘 |
-| SR | 황금 | 노랑 |
-| UR | 빨강 | 분홍 |
-| UL | 보라 | 연보라 |
-| SE | 에메랄드 | 민트 |
-| PSR | 하늘 | 스카이블루 |
+- 실제 운영 URL, 키, 비밀번호 같은 민감값은 이 문서에 적지 않습니다.
+- 환경값은 `.env.local` 및 실제 배포 환경에서 확인해야 합니다.
+- 공개 README에는 내부 테이블 구조를 노출하지 않도록 정리해두었습니다.
 
 ---
 
-## 마이그레이션 이력
+## 7. 최근에 해결한 주요 문제
 
-### 초기 마이그레이션 (1회 완료)
-```bash
-pnpm dlx tsx _scripts/migrate.ts
-```
-mock-cards.ts → Supabase tabs + cards INSERT.
-이미지: `card_images/sheet1_AX_imageY.png` → Storage `cards/{CODE}.png`.
+이번 구간에서 실제로 수정된 대표 문제는 아래입니다.
 
-### 이미지 재매핑 (정렬 오류 수정)
-```bash
-pnpm dlx tsx _scripts/remap-images.ts
-```
-스프레드시트 행 순서(코드 오름차순 A2~A25)에 맞춰 이미지-카드 코드 재매핑.
-`card_images/` 폴더는 git 제외 (.gitignore에 추가됨).
+### 메인 화면 탭이 바뀌지 않던 문제
+
+- 원인: 게임 초기화 effect가 사용자가 고른 탭 상태를 계속 덮어씀
+- 해결: 게임 변경 시점만 초기 탭을 재설정하도록 정리
+
+### `AnimatePresence is not defined`
+
+- 원인: import 누락
+- 해결: `framer-motion` import 정리
+
+### `priceAuditByOrderId is not defined`
+
+- 원인: 가격 조정 이력 변수명 변경 후 일부 참조가 남아 있었음
+- 해결: `priceAdjustmentsByOrderId` 기준으로 통일
+
+### nested button hydration 오류
+
+- 원인: 관리자 모달 내부에 버튼 안에 버튼이 들어가 있던 구조
+- 해결: 바깥 클릭 영역 구조 수정
+
+### 가격 조정 저장 시 런타임 오류
+
+- 원인: 구형 DB 환경에서 `note` 컬럼 불일치와 에러 객체 처리 미흡
+- 해결: fallback 처리 + 에러 핸들링 정리
+
+### `0원` 조정 및 메모 삭제 반영 문제
+
+- 원인: falsy 처리 때문에 `0`과 빈 메모가 제대로 저장되지 않음
+- 해결: 빈값 판별 로직 분리
 
 ---
 
-## 남은 작업
+## 8. 문서 상태
 
-- [ ] Supabase RLS 정책 강화 (현재 anon 전체 허용 - 프로토타입 수준)
-- [ ] 관리자 PIN 인증을 Supabase Auth로 교체 (현재 로컬 config.json 방식)
-- [ ] 버스트 프로토콜 등 추가 확장팩 카드 데이터 입력
-- [ ] Electron 빌드 후 NEXT_PUBLIC_ 환경변수 번들 포함 여부 검증
-- [ ] 주문 내역 날짜 범위 필터 / CSV 내보내기
+### 공개용 문서
+
+- `README.md`
+  - 외부 공개 기준으로 정리
+  - 내부 스키마 / 버킷명 / 인증 저장 구조 등은 제거
+
+### 릴리스 문서
+
+- `release-notes/v0.1.0.md` ~ `release-notes/v0.5.0.md`
+  - 형식과 어체 통일 완료
+  - GitHub Releases 본문도 동일 기준으로 정리 완료
+
+### 내부 인수인계 문서
+
+- `HANDOVER.md`
+  - 현재 파일
+- AI_HUB 쪽 통합 문서
+  - 별도 관리 중
+
+---
+
+## 9. 다음 작업자가 먼저 확인할 것
+
+우선순위는 아래 순서가 좋습니다.
+
+1. `components/global-admin-modal.tsx`
+2. `components/full-width-grid.tsx`
+3. `lib/use-orders.ts`
+4. 최신 릴리스 노트 `release-notes/v0.5.0.md`
+5. `README.md`
+
+특히 관리자 기능을 손댈 때는 `global-admin-modal.tsx`와 `use-orders.ts`를 같이 읽어야 맥락이 맞습니다.
+
+---
+
+## 10. 다음 우선 과제
+
+아직 더 고도화할 여지가 있는 영역은 아래입니다.
+
+- 가격 조정 이력 조회 UX 개선
+- 출력 문서 디자인 정리
+- 카드 일괄 편집 CSV 포맷 개선
+- 주문 처리 속도 개선
+- 오프라인 / 저장 실패 안내 UX 강화
+- 자동 테스트 범위 확대
+
+---
+
+## 11. 배포 메모
+
+- 버전 표기는 `vX.Y.Z` 기준으로 관리
+- 배포 파일명은 `MarinfordKiosk_v{version}.exe`
+- GitHub 릴리스 제목도 동일하게 `vX.Y.Z`
+- 릴리스 노트와 실제 태그명을 맞추는 방식으로 유지
+
+현재 최신 커밋 흐름상, 문서와 릴리스 정리는 `v0.5.0` 기준으로 맞춰진 상태입니다.
