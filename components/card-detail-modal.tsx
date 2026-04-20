@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Settings, Minus, Plus, Check, X, Save, ShoppingCart, Trash2 } from 'lucide-react'
 import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards } from '@/lib/use-cards'
+import { useStoreSettings } from '@/lib/use-settings'
 import { PinAuthOverlay } from './pin-auth-overlay'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
@@ -18,6 +19,8 @@ interface CardDetailModalProps {
 }
 
 export function CardDetailModal({ card, onClose, initialEditMode = false }: CardDetailModalProps) {
+  const { globalRarities } = useStoreSettings()
+  const availableEditRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
   const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showPinOverlay, setShowPinOverlay] = useState(false)
@@ -28,11 +31,11 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   const [editName, setEditName] = useState(card.name)
   const [editImageUrl, setEditImageUrl] = useState(card.imageUrl)
   const [editEnabledRarities, setEditEnabledRarities] = useState<Record<string, boolean>>(() => {
-    const base = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
+    const base = Object.fromEntries(availableEditRarities.map(r => [r, false]))
     return { ...base, ...card.enabledRarities }
   })
   const [editPrices, setEditPrices] = useState<Record<string, number>>(() => {
-    const base = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+    const base = Object.fromEntries(availableEditRarities.map(r => [r, 0]))
     card.prices.forEach(p => { base[p.rarity] = p.price })
     return base
   })
@@ -47,6 +50,25 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
 
   const { addItem } = useCart()
   const { updateCard, deleteCard } = useCards()
+
+  useEffect(() => {
+    setEditEnabledRarities((prev) => {
+      const base = Object.fromEntries(availableEditRarities.map(r => [r, false]))
+      for (const rarity of availableEditRarities) {
+        if (rarity in prev) base[rarity] = prev[rarity]
+      }
+      return { ...base, ...card.enabledRarities }
+    })
+
+    setEditPrices((prev) => {
+      const base = Object.fromEntries(availableEditRarities.map(r => [r, 0]))
+      for (const rarity of availableEditRarities) {
+        if (rarity in prev) base[rarity] = prev[rarity]
+      }
+      card.prices.forEach(p => { base[p.rarity] = p.price })
+      return base
+    })
+  }, [availableEditRarities, card.enabledRarities, card.prices])
 
   // Filter to only show enabled rarities for purchase
   const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity] && p.price > 0)
@@ -96,11 +118,11 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
 
   const handleSaveEdit = useCallback(() => {
     // 활성화 + 가격 > 0 인 레어도만 유효
-    const newPrices = ALL_RARITIES
+    const newPrices = availableEditRarities
       .filter(r => editEnabledRarities[r] && (editPrices[r] || 0) > 0)
       .map(r => ({ rarity: r as RarityKey, price: editPrices[r] }))
     const newEnabledRarities = Object.fromEntries(
-      ALL_RARITIES.map(r => [r, editEnabledRarities[r] && (editPrices[r] || 0) > 0])
+      availableEditRarities.map(r => [r, editEnabledRarities[r] && (editPrices[r] || 0) > 0])
     )
 
     updateCard(card.id, {
@@ -112,18 +134,18 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
     })
     setEditMode(false)
     onClose()
-  }, [card.id, editName, editImageUrl, editEnabledRarities, editPrices, updateCard, onClose])
+  }, [availableEditRarities, card.id, editName, editImageUrl, editEnabledRarities, editPrices, updateCard, onClose])
 
   const handleCancelEdit = useCallback(() => {
     setEditMode(false)
     setEditName(card.name)
     setEditImageUrl(card.imageUrl)
-    const baseEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
+    const baseEnabled = Object.fromEntries(availableEditRarities.map(r => [r, false]))
     setEditEnabledRarities({ ...baseEnabled, ...card.enabledRarities })
-    const basePrices = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+    const basePrices = Object.fromEntries(availableEditRarities.map(r => [r, 0]))
     card.prices.forEach(p => { basePrices[p.rarity] = p.price })
     setEditPrices(basePrices)
-  }, [card])
+  }, [availableEditRarities, card])
 
   return (
     <>
@@ -289,6 +311,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-zinc-400">레어도별 매입가</label>
                     <RarityPicker
+                      rarities={availableEditRarities}
                       enabledRarities={editEnabledRarities}
                       prices={editPrices}
                       onToggle={(rarity, enabled) =>

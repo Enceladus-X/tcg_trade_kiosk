@@ -90,6 +90,56 @@ function strHash(s: string): number {
 }
 
 export function getRarityColors(rarity: string) {
+  const normalized = rarity.trim().toLowerCase()
+
+  if (normalized === 'l' || normalized === '리더') {
+    return {
+      bg: 'bg-red-500/20',
+      text: 'text-red-400',
+      border: 'border border-red-500/50',
+    }
+  }
+
+  if (normalized === 'sr' || normalized === '슈퍼레어') {
+    return {
+      bg: 'bg-purple-500/20',
+      text: 'text-purple-400',
+      border: 'border border-purple-500/50',
+    }
+  }
+
+  if (normalized === 'sec' || normalized === '시크릿') {
+    return {
+      bg: 'bg-amber-500/20',
+      text: 'text-amber-400',
+      border: 'border border-amber-500/50',
+    }
+  }
+
+  if (normalized === 'sp' || normalized === '스페셜') {
+    return {
+      bg: 'bg-cyan-500/20',
+      text: 'text-cyan-400',
+      border: 'border border-cyan-500/50',
+    }
+  }
+
+  if (normalized === 'pa' || normalized === '패러렐' || normalized === 'parallel') {
+    return {
+      bg: 'bg-pink-500/20',
+      text: 'text-pink-400',
+      border: 'border border-pink-500/50',
+    }
+  }
+
+  if (normalized === 'pr' || normalized === '프로모') {
+    return {
+      bg: 'bg-lime-500/20',
+      text: 'text-lime-400',
+      border: 'border border-lime-500/50',
+    }
+  }
+
   return rarityColors[rarity] ?? EXTRA_RARITY_COLORS[strHash(rarity) % EXTRA_RARITY_COLORS.length]
 }
 

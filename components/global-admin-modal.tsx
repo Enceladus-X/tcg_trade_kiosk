@@ -74,8 +74,8 @@ const ORDER_STATUS_FILTERS: { key: OrderStatus | 'all'; label: string }[] = [
   { key: 'rejected', label: '거절됨' },
 ]
 
-const emptyEnabled = Object.fromEntries(ALL_RARITIES.map(r => [r, false]))
-const emptyPrices  = Object.fromEntries(ALL_RARITIES.map(r => [r, 0]))
+const buildEmptyEnabled = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, false]))
+const buildEmptyPrices = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, 0]))
 
 function parseCsvRow(line: string): string[] {
   const cells: string[] = []
@@ -125,6 +125,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
   const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
+  const availableRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
@@ -183,8 +184,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [newCardImageUrl, setNewCardImageUrl] = useState('')
   const [newCardCategory, setNewCardCategory] = useState<string>(tabs[0] ?? '')
   const [newCardCategoryMenuOpen, setNewCardCategoryMenuOpen] = useState(false)
-  const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>({ ...emptyEnabled })
-  const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>({ ...emptyPrices })
+  const [newCardEnabled, setNewCardEnabled]   = useState<Record<string, boolean>>(() => buildEmptyEnabled(availableRarities))
+  const [newCardPrices, setNewCardPrices]     = useState<Record<string, number>>(() => buildEmptyPrices(availableRarities))
   const newCardCategoryMenuRef = useRef<HTMLDivElement>(null)
 
   const [cardSearch, setCardSearch]   = useState('')
@@ -215,13 +216,30 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     }
   }, [newCardCategory, tabs])
 
+  useEffect(() => {
+    setNewCardEnabled((prev) => {
+      const next = buildEmptyEnabled(availableRarities)
+      for (const rarity of availableRarities) {
+        if (rarity in prev) next[rarity] = prev[rarity]
+      }
+      return next
+    })
+    setNewCardPrices((prev) => {
+      const next = buildEmptyPrices(availableRarities)
+      for (const rarity of availableRarities) {
+        if (rarity in prev) next[rarity] = prev[rarity]
+      }
+      return next
+    })
+  }, [availableRarities])
+
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
-    const prices = ALL_RARITIES
+    const prices = availableRarities
       .filter(r => newCardEnabled[r] && (newCardPrices[r] || 0) > 0)
       .map(r => ({ rarity: r as RarityKey, price: newCardPrices[r] }))
     const enabledRarities = Object.fromEntries(
-      ALL_RARITIES.map(r => [r, newCardEnabled[r] && (newCardPrices[r] || 0) > 0])
+      availableRarities.map(r => [r, newCardEnabled[r] && (newCardPrices[r] || 0) > 0])
     )
     addCard({
       name: newCardName.trim(), code: newCardCode.trim(),
@@ -230,7 +248,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       prices, enabledRarities, isStopped: prices.length === 0,
     })
     setNewCardName(''); setNewCardCode(''); setNewCardImageUrl('')
-    setNewCardEnabled({ ...emptyEnabled }); setNewCardPrices({ ...emptyPrices })
+    setNewCardEnabled(buildEmptyEnabled(availableRarities)); setNewCardPrices(buildEmptyPrices(availableRarities))
     setActiveTab('orders')
   }
 
@@ -1095,6 +1113,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-zinc-400">레어도별 매입가</label>
                   <RarityPicker
+                    rarities={availableRarities}
                     enabledRarities={newCardEnabled} prices={newCardPrices}
                     onToggle={(rarity, enabled) => setNewCardEnabled(prev => ({ ...prev, [rarity]: enabled }))}
                     onPriceChange={(rarity, price) => setNewCardPrices(prev => ({ ...prev, [rarity]: price }))}

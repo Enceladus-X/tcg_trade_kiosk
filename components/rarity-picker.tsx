@@ -6,20 +6,22 @@ export const ALL_RARITIES = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'] as const
 export type RarityKey = typeof ALL_RARITIES[number]
 
 interface RarityPickerProps {
+  rarities?: readonly string[]
   enabledRarities: Record<string, boolean>
   prices: Record<string, number>
   onToggle: (rarity: string, enabled: boolean) => void
   onPriceChange: (rarity: string, price: number) => void
 }
 
-export function RarityPicker({ enabledRarities, prices, onToggle, onPriceChange }: RarityPickerProps) {
-  const enabledList = ALL_RARITIES.filter(r => enabledRarities[r])
+export function RarityPicker({ rarities, enabledRarities, prices, onToggle, onPriceChange }: RarityPickerProps) {
+  const rarityList = rarities && rarities.length > 0 ? [...rarities] : [...ALL_RARITIES]
+  const enabledList = rarityList.filter(r => enabledRarities[r])
 
   return (
     <div className="space-y-3">
       {/* 레어도 칩 */}
       <div className="flex flex-wrap gap-2">
-        {ALL_RARITIES.map(rarity => {
+        {rarityList.map(rarity => {
           const colors = getRarityColors(rarity)
           const enabled = !!enabledRarities[rarity]
           return (

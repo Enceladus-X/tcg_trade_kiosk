@@ -1,6 +1,6 @@
 # 마린포드 TCG 매입 키오스크
 
-![version](https://img.shields.io/badge/version-v0.5.0-amber)
+![version](https://img.shields.io/badge/version-v0.5.1-amber)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron)
 ![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase)
@@ -10,7 +10,8 @@
 마린포드 매장에서 사용하는 TCG 싱글카드 매입 키오스크입니다.  
 고객은 키오스크에서 직접 카드를 찾고 매입 요청을 넣을 수 있고, 직원은 관리자 화면에서 주문 확인, 가격 조정, 출력, 카드 관리, 설정을 처리할 수 있습니다.
 
-- 최신 릴리스: [v0.5.0](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)
+- 현재 준비 버전: `v0.5.1`
+- 최신 공개 릴리스: [Releases](https://github.com/Enceladus-X/tcg_trade_kiosk/releases/latest)
 - 배포 형식: Windows x64 포터블 실행 파일 `MarinfordKiosk_v{version}.exe`
 
 ---
@@ -49,7 +50,7 @@
 
 ## 현재 버전 기준 변경점
 
-현재 `v0.5.0` 기준으로 다음 기능이 포함되어 있습니다.
+현재 `v0.5.1` 기준으로 다음 기능이 포함되어 있습니다.
 
 - 견적서 / 영수증 출력
 - 마일리지 배율 및 적용 지급액 표시
@@ -57,6 +58,8 @@
 - 주문 검색 기능
 - 카드 일괄 편집용 CSV 가져오기 / 내보내기
 - 카드 추가 및 게임 관리 UI 개선
+- 설정 레어도 기반 카드 추가 / 카드 수정 폼 동기화
+- 원피스 전용 레어도 고정 색상 팔레트 추가
 - 메인 화면 탭 / 검색 / 동기화 상태 안정화
 - 장바구니 및 상세 모달 애니메이션 개선
 
