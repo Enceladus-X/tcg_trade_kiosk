@@ -1,7 +1,7 @@
 // Card data - source: 유희왕_매입스프레드_시트.xlsx
 
 export interface CardPrice {
-  rarity: 'N' | 'R' | 'SR' | 'UR' | 'UL' | 'SE' | 'PSE'
+  rarity: string
   price: number
 }
 
@@ -10,6 +10,8 @@ export interface Card {
   name: string
   code: string
   category: string
+  gameId?: string | null
+  tabId?: string | null
   imageUrl: string
   prices: CardPrice[]
 }

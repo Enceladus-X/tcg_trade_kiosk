@@ -8,6 +8,8 @@ export type DbCard = {
   name: string
   code: string
   category: string
+  game_id: string | null
+  tab_id: string | null
   image_url: string
   is_stopped: boolean
   prices: CardPrice[]                    // jsonb

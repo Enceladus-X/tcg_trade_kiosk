@@ -1,16 +1,24 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Settings, Minus, Plus, Check, X, Save, ShoppingCart, Trash2 } from 'lucide-react'
 import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
-import { useCards } from '@/lib/use-cards'
+import { useCards, useTabs } from '@/lib/use-cards'
+import { useGames } from '@/lib/use-games'
 import { useStoreSettings } from '@/lib/use-settings'
 import { PinAuthOverlay } from './pin-auth-overlay'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface CardDetailModalProps {
   card: CardWithStatus
@@ -20,6 +28,8 @@ interface CardDetailModalProps {
 
 export function CardDetailModal({ card, onClose, initialEditMode = false }: CardDetailModalProps) {
   const { globalRarities } = useStoreSettings()
+  const { tabObjects } = useTabs()
+  const { games } = useGames()
   const availableEditRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
   const [selectedRarity, setSelectedRarity] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -30,6 +40,8 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   // Edit mode state - 모든 레어도 포함
   const [editName, setEditName] = useState(card.name)
   const [editImageUrl, setEditImageUrl] = useState(card.imageUrl)
+  const [editGameId, setEditGameId] = useState<string | null>(card.gameId ?? null)
+  const [editTabId, setEditTabId] = useState<string | null>(card.tabId ?? null)
   const [editEnabledRarities, setEditEnabledRarities] = useState<Record<string, boolean>>(() => {
     const base = Object.fromEntries(availableEditRarities.map(r => [r, false]))
     return { ...base, ...card.enabledRarities }
@@ -41,6 +53,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   })
 
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [cartFlyAnim, setCartFlyAnim] = useState<{
     startX: number
     startY: number
@@ -49,7 +62,17 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   } | null>(null)
 
   const { addItem } = useCart()
-  const { updateCard, deleteCard } = useCards()
+  const { updateCardAsync, deleteCard } = useCards()
+
+  const fallbackTab = useMemo(
+    () => tabObjects.find((tab) => tab.name === card.category) ?? null,
+    [card.category, tabObjects]
+  )
+
+  const availableTabsForGame = useMemo(() => {
+    if (!editGameId) return tabObjects
+    return tabObjects.filter((tab) => tab.game_id === editGameId)
+  }, [editGameId, tabObjects])
 
   useEffect(() => {
     setEditEnabledRarities((prev) => {
@@ -69,6 +92,28 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
       return base
     })
   }, [availableEditRarities, card.enabledRarities, card.prices])
+
+  useEffect(() => {
+    setEditName(card.name)
+    setEditImageUrl(card.imageUrl)
+    setEditGameId(card.gameId ?? fallbackTab?.game_id ?? null)
+    setEditTabId(card.tabId ?? fallbackTab?.id ?? null)
+  }, [card.gameId, card.imageUrl, card.name, card.tabId, fallbackTab])
+
+  useEffect(() => {
+    if (availableTabsForGame.length === 0) {
+      setEditTabId(null)
+      return
+    }
+
+    const isCurrentTabVisible = editTabId
+      ? availableTabsForGame.some((tab) => tab.id === editTabId)
+      : false
+
+    if (!isCurrentTabVisible && editGameId) {
+      setEditTabId(availableTabsForGame[0].id)
+    }
+  }, [availableTabsForGame, editGameId, editTabId])
 
   // Filter to only show enabled rarities for purchase
   const availableRarities = card.prices.filter(p => card.enabledRarities[p.rarity] && p.price > 0)
@@ -116,7 +161,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
     setEditMode(true)
   }, [])
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback(async () => {
     // 활성화 + 가격 > 0 인 레어도만 유효
     const newPrices = availableEditRarities
       .filter(r => editEnabledRarities[r] && (editPrices[r] || 0) > 0)
@@ -124,28 +169,44 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
     const newEnabledRarities = Object.fromEntries(
       availableEditRarities.map(r => [r, editEnabledRarities[r] && (editPrices[r] || 0) > 0])
     )
+    const selectedTab = tabObjects.find((tab) => tab.id === editTabId) ?? null
 
-    updateCard(card.id, {
-      name: editName,
-      imageUrl: editImageUrl,
-      enabledRarities: newEnabledRarities,
-      prices: newPrices as CardPrice[],
-      isStopped: newPrices.length === 0,
-    })
-    setEditMode(false)
-    onClose()
-  }, [availableEditRarities, card.id, editName, editImageUrl, editEnabledRarities, editPrices, updateCard, onClose])
+    setSaveError(null)
+    try {
+      await updateCardAsync(card.id, {
+        name: editName,
+        category: selectedTab?.name ?? card.category,
+        gameId: editGameId,
+        tabId: selectedTab?.id ?? null,
+        imageUrl: editImageUrl,
+        enabledRarities: newEnabledRarities,
+        prices: newPrices as CardPrice[],
+        isStopped: newPrices.length === 0,
+      })
+      setEditMode(false)
+      onClose()
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : '카드 저장 중 오류가 발생했습니다. 다시 시도해 주세요.'
+      )
+    }
+  }, [availableEditRarities, card.category, card.id, editGameId, editImageUrl, editName, editEnabledRarities, editPrices, editTabId, onClose, tabObjects, updateCardAsync])
 
   const handleCancelEdit = useCallback(() => {
     setEditMode(false)
+    setSaveError(null)
     setEditName(card.name)
     setEditImageUrl(card.imageUrl)
+    setEditGameId(card.gameId ?? fallbackTab?.game_id ?? null)
+    setEditTabId(card.tabId ?? fallbackTab?.id ?? null)
     const baseEnabled = Object.fromEntries(availableEditRarities.map(r => [r, false]))
     setEditEnabledRarities({ ...baseEnabled, ...card.enabledRarities })
     const basePrices = Object.fromEntries(availableEditRarities.map(r => [r, 0]))
     card.prices.forEach(p => { basePrices[p.rarity] = p.price })
     setEditPrices(basePrices)
-  }, [availableEditRarities, card])
+  }, [availableEditRarities, card, fallbackTab])
 
   return (
     <>
@@ -289,6 +350,11 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
               {/* Scrollable Edit Content */}
               <div className="flex-1 overflow-y-auto p-8">
                 <div className="space-y-6">
+                  {saveError && (
+                    <p className="rounded-xl border border-red-500/30 bg-red-950/50 px-4 py-3 text-sm text-red-200">
+                      {saveError}
+                    </p>
+                  )}
                   {/* Card Name */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-zinc-400">카드명</label>
@@ -299,6 +365,54 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
                       className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-zinc-600 focus:outline-none"
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-zinc-400">게임</label>
+                      <Select
+                        value={editGameId ?? '__all__'}
+                        onValueChange={(value) => setEditGameId(value === '__all__' ? null : value)}
+                      >
+                        <SelectTrigger className="h-12 w-full rounded-xl border-zinc-700 bg-zinc-800 text-white">
+                          <SelectValue placeholder="게임 선택" />
+                        </SelectTrigger>
+                        <SelectContent className="border-zinc-700 bg-zinc-900 text-white">
+                          <SelectItem value="__all__">전체 게임</SelectItem>
+                          {games.map((game) => (
+                            <SelectItem key={game.id} value={game.id}>
+                              {game.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-zinc-400">탭</label>
+                      <Select
+                        value={editTabId ?? '__none__'}
+                        onValueChange={(value) => setEditTabId(value === '__none__' ? null : value)}
+                      >
+                        <SelectTrigger className="h-12 w-full rounded-xl border-zinc-700 bg-zinc-800 text-white">
+                          <SelectValue placeholder="탭 선택" />
+                        </SelectTrigger>
+                        <SelectContent className="border-zinc-700 bg-zinc-900 text-white">
+                          <SelectItem value="__none__">탭 미지정</SelectItem>
+                          {availableTabsForGame.map((tab) => (
+                            <SelectItem key={tab.id} value={tab.id}>
+                              {tab.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {editGameId && availableTabsForGame.length === 0 && (
+                    <p className="text-xs text-amber-400">
+                      선택한 게임에 연결된 탭이 없습니다. 먼저 게임/탭 관리에서 탭을 연결해 주세요.
+                    </p>
+                  )}
                   
                   {/* Image URL */}
                   <ImageUploadField

@@ -317,15 +317,21 @@ export function CartListModal({ onClose }: CartListModalProps) {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => updateQuantity(item.cardId, item.rarity, item.quantity - 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
+                            aria-label={item.quantity === 1 ? `${item.cardName} 삭제` : `${item.cardName} 수량 감소`}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                              item.quantity === 1
+                                ? 'bg-red-500/15 text-red-300 hover:bg-red-500/25 hover:text-red-200'
+                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                            }`}
                           >
-                            <Minus className="h-4 w-4" />
+                            {item.quantity === 1 ? <Trash2 className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
                           </button>
                           <span className="w-8 text-center text-sm font-semibold text-white">
                             {item.quantity}
                           </span>
                           <button
                             onClick={() => updateQuantity(item.cardId, item.rarity, item.quantity + 1)}
+                            aria-label={`${item.cardName} 수량 증가`}
                             className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
                           >
                             <Plus className="h-4 w-4" />

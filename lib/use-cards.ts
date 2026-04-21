@@ -6,6 +6,18 @@ import { supabase } from './supabase'
 import { type CardWithStatus, type CardPrice } from './mock-cards'
 import { type DbCard } from './database.types'
 
+function isMissingCardRelationColumnsError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === '42703'
+    && typeof maybeError.message === 'string'
+    && (maybeError.message.includes('cards.game_id') || maybeError.message.includes('cards.tab_id'))
+}
+
+function canFallbackWithoutCardRelationColumns(card: { gameId?: string | null; tabId?: string | null }): boolean {
+  return card.gameId == null || card.tabId != null
+}
+
 // --- 타입 변환 ---
 
 function dbToCard(row: DbCard): CardWithStatus {
@@ -14,6 +26,8 @@ function dbToCard(row: DbCard): CardWithStatus {
     name: row.name,
     code: row.code,
     category: row.category,
+    gameId: row.game_id,
+    tabId: row.tab_id,
     imageUrl: row.image_url,
     prices: row.prices,
     isStopped: row.is_stopped,
@@ -26,6 +40,8 @@ function cardToDb(card: Partial<CardWithStatus>): Partial<DbCard> {
   if (card.name !== undefined)            db.name = card.name
   if (card.code !== undefined)            db.code = card.code
   if (card.category !== undefined)        db.category = card.category
+  if (card.gameId !== undefined)          db.game_id = card.gameId
+  if (card.tabId !== undefined)           db.tab_id = card.tabId
   if (card.imageUrl !== undefined)        db.image_url = card.imageUrl
   if (card.isStopped !== undefined)       db.is_stopped = card.isStopped
   if (card.prices !== undefined)          db.prices = card.prices
@@ -63,10 +79,20 @@ export function useCards() {
   // 단일 필드 업데이트 (이미지, 이름 등 공통 처리)
   const updateMutation = useMutation({
     mutationFn: async ({ cardId, updates }: { cardId: string; updates: Partial<CardWithStatus> }) => {
-      const { error } = await supabase
+      let { error } = await supabase
         .from('cards')
         .update(cardToDb(updates))
         .eq('id', cardId)
+      if (error && isMissingCardRelationColumnsError(error)) {
+        if (!canFallbackWithoutCardRelationColumns(updates)) {
+          throw new Error('현재 운영 DB에 cards.game_id / cards.tab_id 컬럼이 없어 탭 없는 게임 배정을 저장할 수 없습니다. Supabase SQL 업데이트가 필요합니다.')
+        }
+        const { gameId: _gameId, tabId: _tabId, ...fallbackUpdates } = updates
+        ;({ error } = await supabase
+          .from('cards')
+          .update(cardToDb(fallbackUpdates))
+          .eq('id', cardId))
+      }
       if (error) throw error
     },
     onSuccess: invalidate,
@@ -74,15 +100,31 @@ export function useCards() {
 
   const addMutation = useMutation({
     mutationFn: async (card: Omit<CardWithStatus, 'id'>) => {
-      const { error } = await supabase.from('cards').insert({
+      let { error } = await supabase.from('cards').insert({
         name: card.name,
         code: card.code,
         category: card.category,
+        game_id: card.gameId ?? null,
+        tab_id: card.tabId ?? null,
         image_url: card.imageUrl,
         is_stopped: card.isStopped,
         prices: card.prices,
         enabled_rarities: card.enabledRarities,
       })
+      if (error && isMissingCardRelationColumnsError(error)) {
+        if (!canFallbackWithoutCardRelationColumns(card)) {
+          throw new Error('현재 운영 DB에 cards.game_id / cards.tab_id 컬럼이 없어 탭 없는 게임 배정을 저장할 수 없습니다. Supabase SQL 업데이트가 필요합니다.')
+        }
+        ;({ error } = await supabase.from('cards').insert({
+          name: card.name,
+          code: card.code,
+          category: card.category,
+          image_url: card.imageUrl,
+          is_stopped: card.isStopped,
+          prices: card.prices,
+          enabled_rarities: card.enabledRarities,
+        }))
+      }
       if (error) throw error
     },
     onSuccess: invalidate,

@@ -222,17 +222,20 @@ export function useOrders() {
       newTotal,
     }: {
       orderId: string
-      itemUpdates: { itemId: string; price: number; note?: string | null }[]
+      itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null }[]
       newTotal: number
     }) => {
       const localNotesByItemId = readLocalOrderItemNotes()
-      for (const { itemId, price, note } of itemUpdates) {
-        const patch: { price: number; note?: string | null } = { price }
+      for (const { itemId, price, quantity, note } of itemUpdates) {
+        const patch: { price: number; quantity?: number; note?: string | null } = { price }
+        if (quantity !== undefined) patch.quantity = quantity
         if (note !== undefined) patch.note = note
 
         let { error } = await supabase.from('order_items').update(patch).eq('id', itemId)
         if (error && note !== undefined && isMissingNoteColumnError(error)) {
-          ;({ error } = await supabase.from('order_items').update({ price }).eq('id', itemId))
+          const fallbackPatch: { price: number; quantity?: number } = { price }
+          if (quantity !== undefined) fallbackPatch.quantity = quantity
+          ;({ error } = await supabase.from('order_items').update(fallbackPatch).eq('id', itemId))
         }
         if (error) throw error
 
@@ -253,6 +256,37 @@ export function useOrders() {
       // order_items는 ON DELETE CASCADE로 자동 삭제
       const { error } = await supabase.from('orders').delete().eq('id', orderId)
       if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  const deleteOrderItemMutation = useMutation({
+    mutationFn: async ({
+      orderId,
+      itemId,
+      newTotal,
+      deleteOrder,
+    }: {
+      orderId: string
+      itemId: string
+      newTotal: number
+      deleteOrder: boolean
+    }) => {
+      const localNotesByItemId = readLocalOrderItemNotes()
+      const { error: itemError } = await supabase.from('order_items').delete().eq('id', itemId)
+      if (itemError) throw itemError
+
+      delete localNotesByItemId[itemId]
+      writeLocalOrderItemNotes(localNotesByItemId)
+
+      if (deleteOrder) {
+        const { error: orderDeleteError } = await supabase.from('orders').delete().eq('id', orderId)
+        if (orderDeleteError) throw orderDeleteError
+        return
+      }
+
+      const { error: orderError } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
+      if (orderError) throw orderError
     },
     onSuccess: invalidate,
   })
@@ -300,7 +334,7 @@ export function useOrders() {
       [updateStatusMutation]
     ),
     updateItemPrices: useCallback(
-      (orderId: string, itemUpdates: { itemId: string; price: number; note?: string | null }[], newTotal: number) =>
+      (orderId: string, itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null }[], newTotal: number) =>
         updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal }),
       [updateItemPricesMutation]
     ),
@@ -312,6 +346,11 @@ export function useOrders() {
     deleteOrder: useCallback(
       (orderId: string) => deleteMutation.mutate(orderId),
       [deleteMutation]
+    ),
+    deleteOrderItem: useCallback(
+      (orderId: string, itemId: string, newTotal: number, deleteOrder: boolean) =>
+        deleteOrderItemMutation.mutateAsync({ orderId, itemId, newTotal, deleteOrder }),
+      [deleteOrderItemMutation]
     ),
   }
 }

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
-  Plus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
+  Plus, Minus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
   MessageSquare, Table2, Download, Upload, Printer, FileText,
 } from 'lucide-react'
@@ -120,6 +120,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     updateItemPrices,
     createPriceAdjustments,
     deleteOrder,
+    deleteOrderItem,
   } = useOrders()
   const { cards, addCard, setCardStopped, updateCardAsync } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
@@ -138,11 +139,14 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   // 가격/메모 조정 상태
   const [adjustedPrices, setAdjustedPrices] = useState<Record<string, string[]>>({})
   const [adjustedNotes,  setAdjustedNotes]  = useState<Record<string, (string | null | undefined)[]>>({})
+  const [adjustedQuantities, setAdjustedQuantities] = useState<Record<string, string[]>>({})
   const [savingOrderId,  setSavingOrderId]  = useState<string | null>(null)
+  const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
   const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
   const [saveErrorByOrderId, setSaveErrorByOrderId] = useState<Record<string, string>>({})
   const [editingItem, setEditingItem] = useState<{ orderId: string; idx: number } | null>(null)
   const [editingValue, setEditingValue] = useState('')
+  const [editingQuantity, setEditingQuantity] = useState('1')
   const [editingPct,   setEditingPct]   = useState('')
   const [editingNote,  setEditingNote]  = useState('')
 
@@ -170,7 +174,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const bulkImportInputRef = useRef<HTMLInputElement>(null)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
-    const text = [order.customerName, order.bankName, order.accountNumber, order.phoneNumber]
+    const text = [order.customerName, order.bankName, order.accountNumber]
       .filter(Boolean).join(' ')
     navigator.clipboard.writeText(text).then(() => {
       setCopiedOrderId(order.id)
@@ -235,6 +239,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   const handleAddCard = () => {
     if (!newCardName.trim() || !newCardCode.trim()) return
+    const selectedTab = tabObjects.find((tab) => tab.name === newCardCategory) ?? null
     const prices = availableRarities
       .filter(r => newCardEnabled[r] && (newCardPrices[r] || 0) > 0)
       .map(r => ({ rarity: r as RarityKey, price: newCardPrices[r] }))
@@ -243,7 +248,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     )
     addCard({
       name: newCardName.trim(), code: newCardCode.trim(),
-      category: newCardCategory || (tabs[0] ?? '기타'),
+      category: selectedTab?.name ?? newCardCategory ?? tabs[0] ?? '미지정',
+      gameId: selectedTab?.game_id ?? null,
+      tabId: selectedTab?.id ?? null,
       imageUrl: newCardImageUrl.trim() || '/placeholder-card.svg',
       prices, enabledRarities, isStopped: prices.length === 0,
     })
@@ -254,11 +261,19 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   // ---- 인라인 가격 편집 ----
 
-  const openEditItem = (orderId: string, idx: number, originalPrice: number, currentNote: string | null | undefined) => {
+  const openEditItem = (
+    orderId: string,
+    idx: number,
+    originalPrice: number,
+    originalQuantity: number,
+    currentNote: string | null | undefined
+  ) => {
     setEditingItem({ orderId, idx })
     const saved = adjustedPrices[orderId]?.[idx]
     const price = saved ? parseFloat(saved) : originalPrice
+    const savedQuantity = adjustedQuantities[orderId]?.[idx]
     setEditingValue(String(price))
+    setEditingQuantity(savedQuantity ?? String(originalQuantity))
     setEditingPct('')
     setEditingNote(adjustedNotes[orderId]?.[idx] ?? currentNote ?? '')
   }
@@ -288,6 +303,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     return Number.isNaN(parsed) ? fallback : parsed
   }
 
+  const parseAdjustedQuantity = (value: string | undefined, fallback: number) => {
+    if (value === undefined || value.trim() === '') return fallback
+    const parsed = parseInt(value, 10)
+    return Number.isNaN(parsed) || parsed < 1 ? fallback : parsed
+  }
+
   const confirmEditItem = (orderId: string, idx: number) => {
     const price = parseFloat(editingValue)
     if (!isNaN(price) && price >= 0) {
@@ -297,12 +318,20 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         return { ...prev, [orderId]: arr }
       })
     }
+    const quantity = parseInt(editingQuantity, 10)
+    if (!Number.isNaN(quantity) && quantity >= 1) {
+      setAdjustedQuantities(prev => {
+        const arr = [...(prev[orderId] ?? [])]
+        arr[idx] = String(quantity)
+        return { ...prev, [orderId]: arr }
+      })
+    }
     setAdjustedNotes(prev => {
       const arr = [...(prev[orderId] ?? [])]
       arr[idx] = editingNote.trim() === '' ? null : editingNote.trim()
       return { ...prev, [orderId]: arr }
     })
-    setEditingItem(null); setEditingValue(''); setEditingPct(''); setEditingNote('')
+    setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote('')
   }
 
   // ---- 가격/메모 DB 저장 ----
@@ -322,16 +351,19 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         .map((item, idx) => ({
           itemId: item.itemId!,
           price: parseAdjustedPrice(priceArr[idx], item.price),
+          quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[idx], item.quantity),
           note: noteArr[idx] !== undefined ? (noteArr[idx] ?? null) : item.note,
         }))
         .filter((u, idx) => {
           const priceChanged = u.price !== order.items[idx].price
+          const quantityChanged = u.quantity !== order.items[idx].quantity
           const noteChanged  = u.note  !== order.items[idx].note
-          return priceChanged || noteChanged
+          return priceChanged || quantityChanged || noteChanged
         })
       const newBaseTotal = order.items.reduce((sum, item, idx) => {
         const p = parseAdjustedPrice(priceArr[idx], item.price)
-        return sum + p * item.quantity
+        const q = parseAdjustedQuantity(adjustedQuantities[order.id]?.[idx], item.quantity)
+        return sum + p * q
       }, 0)
       const newTotal = order.mileageRate
         ? Math.round(newBaseTotal * order.mileageRate)
@@ -365,6 +397,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       setSaveErrorByOrderId((prev) => ({ ...prev, [order.id]: message }))
     } finally {
       setSavingOrderId(null)
+    }
+  }
+
+  const handleDeleteItem = async (order: (typeof orders)[number], idx: number) => {
+    const target = order.items[idx]
+    if (!target?.itemId) return
+
+    const remainingItems = order.items.filter((_, itemIdx) => itemIdx !== idx)
+    const deleteWholeOrder = remainingItems.length === 0
+    const newBaseTotal = remainingItems.reduce((sum, item, itemIdx) => {
+      const originalIdx = order.items.findIndex((candidate) => candidate.itemId === item.itemId)
+      const price = parseAdjustedPrice(adjustedPrices[order.id]?.[originalIdx], item.price)
+      const quantity = parseAdjustedQuantity(adjustedQuantities[order.id]?.[originalIdx], item.quantity)
+      return sum + price * quantity
+    }, 0)
+    const newTotal = order.mileageRate
+      ? Math.round(newBaseTotal * order.mileageRate)
+      : newBaseTotal
+
+    setDeletingItemKey(target.itemId)
+    try {
+      await deleteOrderItem(order.id, target.itemId, newTotal, deleteWholeOrder)
+      if (deleteWholeOrder) {
+        setExpandedOrder((current) => (current === order.id ? null : current))
+      }
+    } finally {
+      setDeletingItemKey(null)
+      setEditingItem(null)
     }
   }
 
@@ -731,6 +791,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const isExpanded = expandedOrder === order.id
                     const priceArr = adjustedPrices[order.id]
                     const noteArr  = adjustedNotes[order.id]
+                    const quantityArr = adjustedQuantities[order.id]
                     const saveError = saveErrorByOrderId[order.id]
                     const pricesChanged = priceArr
                       ? order.items.some((item, idx) => {
@@ -738,10 +799,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           return v !== undefined && v !== '' && parseFloat(v) !== item.price
                         })
                       : false
+                    const quantitiesChanged = quantityArr
+                      ? order.items.some((item, idx) => {
+                          const v = quantityArr[idx]
+                          return v !== undefined && v !== '' && parseAdjustedQuantity(v, item.quantity) !== item.quantity
+                        })
+                      : false
                     const notesChanged = noteArr
                       ? order.items.some((item, idx) => noteArr[idx] !== undefined && noteArr[idx] !== item.note)
                       : false
-                    const hasChanges = pricesChanged || notesChanged
+                    const hasChanges = pricesChanged || quantitiesChanged || notesChanged
                     const isAdjusted = adjustedOrderIds.has(order.id)
                     const orderAuditEntries = priceAdjustmentsByOrderId[order.id] ?? []
 
@@ -758,6 +825,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               setAdjustedPrices(prev => ({
                                 ...prev, [order.id]: order.items.map(i => String(i.price)),
                               }))
+                              setAdjustedQuantities(prev => ({
+                                ...prev, [order.id]: order.items.map(i => String(i.quantity)),
+                              }))
                               setAdjustedNotes(prev => ({
                                 ...prev, [order.id]: order.items.map(i => i.note ?? undefined),
                               }))
@@ -772,6 +842,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 setExpandedOrder(order.id)
                                 setAdjustedPrices(prev => ({
                                   ...prev, [order.id]: order.items.map(i => String(i.price)),
+                                }))
+                                setAdjustedQuantities(prev => ({
+                                  ...prev, [order.id]: order.items.map(i => String(i.quantity)),
                                 }))
                                 setAdjustedNotes(prev => ({
                                   ...prev, [order.id]: order.items.map(i => i.note ?? undefined),
@@ -850,9 +923,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 const colors = getRarityColors(item.rarity)
                                 const cardImg = item.cardId ? cards.find(c => c.id === item.cardId)?.imageUrl : undefined
                                 const savedPrice = priceArr?.[idx]
+                                const savedQuantity = quantityArr?.[idx]
                                 const displayPrice = savedPrice !== undefined ? (parseFloat(savedPrice) || item.price) : item.price
+                                const displayQuantity = savedQuantity !== undefined ? parseAdjustedQuantity(savedQuantity, item.quantity) : item.quantity
                                 const displayNote  = noteArr?.[idx] !== undefined ? noteArr[idx] : item.note
                                 const isPriceChanged = savedPrice !== undefined && parseFloat(savedPrice) !== item.price
+                                const isQuantityChanged = savedQuantity !== undefined && parseAdjustedQuantity(savedQuantity, item.quantity) !== item.quantity
                                 const isItemEditing = editingItem?.orderId === order.id && editingItem?.idx === idx
 
                                 return (
@@ -873,20 +949,25 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           </span>
                                         )}
                                       </div>
-                                      <span className="shrink-0 text-xs text-zinc-500">x{item.quantity}</span>
+                                      <span className={`shrink-0 text-xs ${isQuantityChanged ? 'text-sky-400' : 'text-zinc-500'}`}>x{displayQuantity}</span>
                                       <div className="flex shrink-0 items-center gap-1.5">
                                         {isPriceChanged && (
                                           <span className="text-xs text-zinc-600 line-through">{formatPrice(item.price)}</span>
                                         )}
-                                        <span className={`text-sm font-medium ${isPriceChanged ? 'text-sky-400' : 'text-zinc-300'}`}>
-                                          {formatPrice(displayPrice * item.quantity)}
+                                        {isQuantityChanged && (
+                                          <span className="text-xs text-zinc-600 line-through">
+                                            {formatPrice(item.price * item.quantity)}
+                                          </span>
+                                        )}
+                                        <span className={`text-sm font-medium ${isPriceChanged || isQuantityChanged ? 'text-sky-400' : 'text-zinc-300'}`}>
+                                          {formatPrice(displayPrice * displayQuantity)}
                                         </span>
                                       </div>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           if (isItemEditing) setEditingItem(null)
-                                          else openEditItem(order.id, idx, item.price, item.note)
+                                          else openEditItem(order.id, idx, item.price, item.quantity, item.note)
                                         }}
                                         className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                                           isItemEditing ? 'bg-zinc-600 text-zinc-300' : 'bg-zinc-700/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'
@@ -925,7 +1006,44 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                             />
                                             <span className="text-xs text-zinc-500 shrink-0">%</span>
                                           </div>
+                                          <span className="text-zinc-700">/</span>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs text-zinc-500 shrink-0">매수</span>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setEditingQuantity((prev) => String(Math.max(1, (parseInt(prev, 10) || item.quantity) - 1)))
+                                              }}
+                                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                                            >
+                                              <Minus className="h-3 w-3" />
+                                            </button>
+                                            <input
+                                              type="number" min="1" step="1"
+                                              value={editingQuantity}
+                                              onChange={(e) => setEditingQuantity(String(Math.max(1, parseInt(e.target.value || '1', 10) || 1)))}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-14 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-center text-sm font-medium text-zinc-300 focus:border-sky-400 focus:outline-none"
+                                            />
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setEditingQuantity((prev) => String((parseInt(prev, 10) || item.quantity) + 1))
+                                              }}
+                                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                                            >
+                                              <Plus className="h-3 w-3" />
+                                            </button>
+                                          </div>
                                           <div className="flex gap-1 ml-auto">
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleDeleteItem(order, idx) }}
+                                              disabled={deletingItemKey === item.itemId}
+                                              className="flex items-center gap-1 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                              삭제
+                                            </button>
                                             <button
                                               onClick={(e) => { e.stopPropagation(); confirmEditItem(order.id, idx) }}
                                               className="flex items-center gap-1 rounded-lg bg-sky-500/20 px-3 py-1.5 text-xs font-medium text-sky-400 hover:bg-sky-500/30"
