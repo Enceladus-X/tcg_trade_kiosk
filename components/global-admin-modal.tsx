@@ -6,7 +6,7 @@ import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
   Plus, Minus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
-  MessageSquare, Table2, Download, Upload, Printer, FileText,
+  MessageSquare, Table2, Download, Upload, Printer, FileText, Banknote,
 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
@@ -14,7 +14,7 @@ import { useStoreSettings } from '@/lib/use-settings'
 import { useGames, type Game } from '@/lib/use-games'
 import { useImageUpload } from '@/lib/use-image-upload'
 import { CardDetailModal } from '@/components/card-detail-modal'
-import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus, type CardPrice } from '@/lib/mock-cards'
+import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus, type CardPrice, type PaymentMethod, type OrderPaymentMethod } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
 
@@ -110,6 +110,61 @@ function parseCsvRow(line: string): string[] {
   return cells
 }
 
+function deriveOrderPaymentMethod(items: { paymentMethod: PaymentMethod }[]): OrderPaymentMethod {
+  const hasCash = items.some((item) => item.paymentMethod === 'cash')
+  const hasMileage = items.some((item) => item.paymentMethod === 'mileage')
+  if (hasCash && hasMileage) return 'mixed'
+  if (hasMileage) return 'mileage'
+  return 'cash'
+}
+
+function getAppliedItemTotal(price: number, quantity: number, paymentMethod: PaymentMethod, mileageRate: number | null) {
+  const subtotal = price * quantity
+  if (paymentMethod === 'mileage') {
+    return Math.round(subtotal * (mileageRate ?? 1))
+  }
+  return subtotal
+}
+
+function PaymentMethodToggle({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: PaymentMethod
+  onChange: (value: PaymentMethod) => void
+  compact?: boolean
+}) {
+  const wrapperClass = compact
+    ? 'grid grid-cols-2 gap-1 rounded-lg border border-zinc-700 bg-zinc-800 p-1'
+    : 'grid grid-cols-2 gap-1 rounded-xl border border-zinc-700 bg-zinc-800/90 p-1'
+
+  const buttonClass = compact
+    ? 'flex items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors'
+    : 'flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors'
+
+  return (
+    <div className={wrapperClass}>
+      <button
+        type="button"
+        onClick={() => onChange('cash')}
+        className={`${buttonClass} ${value === 'cash' ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+      >
+        <Banknote className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
+        현금
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('mileage')}
+        className={`${buttonClass} ${value === 'mileage' ? 'bg-emerald-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+      >
+        <Coins className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
+        마일리지
+      </button>
+    </div>
+  )
+}
+
 type AdminTab = 'orders' | 'add-card' | 'cards' | 'game-tabs' | 'stats' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
@@ -125,7 +180,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { cards, addCard, setCardStopped, updateCardAsync } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
-  const { mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
+  const { mileageRate, mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
   const availableRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
@@ -137,18 +192,20 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all')
 
   // 가격/메모 조정 상태
-  const [adjustedPrices, setAdjustedPrices] = useState<Record<string, string[]>>({})
-  const [adjustedNotes,  setAdjustedNotes]  = useState<Record<string, (string | null | undefined)[]>>({})
-  const [adjustedQuantities, setAdjustedQuantities] = useState<Record<string, string[]>>({})
+  const [adjustedPrices, setAdjustedPrices] = useState<Record<string, Record<string, string>>>({})
+  const [adjustedNotes,  setAdjustedNotes]  = useState<Record<string, Record<string, string | null | undefined>>>({})
+  const [adjustedQuantities, setAdjustedQuantities] = useState<Record<string, Record<string, string>>>({})
   const [savingOrderId,  setSavingOrderId]  = useState<string | null>(null)
   const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
   const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
   const [saveErrorByOrderId, setSaveErrorByOrderId] = useState<Record<string, string>>({})
-  const [editingItem, setEditingItem] = useState<{ orderId: string; idx: number } | null>(null)
+  const [editingItem, setEditingItem] = useState<{ orderId: string; itemId: string } | null>(null)
   const [editingValue, setEditingValue] = useState('')
   const [editingQuantity, setEditingQuantity] = useState('1')
   const [editingPct,   setEditingPct]   = useState('')
   const [editingNote,  setEditingNote]  = useState('')
+  const [adjustedPaymentMethods, setAdjustedPaymentMethods] = useState<Record<string, Record<string, PaymentMethod>>>({})
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethod>('cash')
 
   // 설정 탭
   const [editMileagePercent, setEditMileagePercent] = useState<string>('')
@@ -263,19 +320,21 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   const openEditItem = (
     orderId: string,
-    idx: number,
+    itemId: string,
     originalPrice: number,
     originalQuantity: number,
-    currentNote: string | null | undefined
+    currentNote: string | null | undefined,
+    currentPaymentMethod: PaymentMethod
   ) => {
-    setEditingItem({ orderId, idx })
-    const saved = adjustedPrices[orderId]?.[idx]
+    setEditingItem({ orderId, itemId })
+    const saved = adjustedPrices[orderId]?.[itemId]
     const price = saved ? parseFloat(saved) : originalPrice
-    const savedQuantity = adjustedQuantities[orderId]?.[idx]
+    const savedQuantity = adjustedQuantities[orderId]?.[itemId]
     setEditingValue(String(price))
     setEditingQuantity(savedQuantity ?? String(originalQuantity))
     setEditingPct('')
-    setEditingNote(adjustedNotes[orderId]?.[idx] ?? currentNote ?? '')
+    setEditingNote(adjustedNotes[orderId]?.[itemId] ?? currentNote ?? '')
+    setEditingPaymentMethod(adjustedPaymentMethods[orderId]?.[itemId] ?? currentPaymentMethod)
   }
 
   const handleDirectChange = (val: string, originalPrice: number) => {
@@ -309,36 +368,43 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     return Number.isNaN(parsed) || parsed < 1 ? fallback : parsed
   }
 
-  const confirmEditItem = (orderId: string, idx: number) => {
+  const confirmEditItem = (orderId: string, itemId: string) => {
     const price = parseFloat(editingValue)
     if (!isNaN(price) && price >= 0) {
       setAdjustedPrices(prev => {
-        const arr = [...(prev[orderId] ?? [])]
-        arr[idx] = String(price)
-        return { ...prev, [orderId]: arr }
+        const next = { ...(prev[orderId] ?? {}) }
+        next[itemId] = String(price)
+        return { ...prev, [orderId]: next }
       })
     }
     const quantity = parseInt(editingQuantity, 10)
     if (!Number.isNaN(quantity) && quantity >= 1) {
       setAdjustedQuantities(prev => {
-        const arr = [...(prev[orderId] ?? [])]
-        arr[idx] = String(quantity)
-        return { ...prev, [orderId]: arr }
+        const next = { ...(prev[orderId] ?? {}) }
+        next[itemId] = String(quantity)
+        return { ...prev, [orderId]: next }
       })
     }
     setAdjustedNotes(prev => {
-      const arr = [...(prev[orderId] ?? [])]
-      arr[idx] = editingNote.trim() === '' ? null : editingNote.trim()
-      return { ...prev, [orderId]: arr }
+      const next = { ...(prev[orderId] ?? {}) }
+      next[itemId] = editingNote.trim() === '' ? null : editingNote.trim()
+      return { ...prev, [orderId]: next }
     })
-    setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote('')
+    setAdjustedPaymentMethods(prev => {
+      const next = { ...(prev[orderId] ?? {}) }
+      next[itemId] = editingPaymentMethod
+      return { ...prev, [orderId]: next }
+    })
+    setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote(''); setEditingPaymentMethod('cash')
   }
 
   // ---- 가격/메모 DB 저장 ----
 
   const handleSavePrices = async (order: (typeof orders)[number]) => {
-    const priceArr = adjustedPrices[order.id] ?? []
-    const noteArr  = adjustedNotes[order.id]  ?? []
+    const priceMap = adjustedPrices[order.id] ?? {}
+    const noteMap  = adjustedNotes[order.id]  ?? {}
+    const paymentMethodMap = adjustedPaymentMethods[order.id] ?? {}
+    const appliedMileageRate = order.mileageRate ?? mileageRate
     setSavingOrderId(order.id)
     setSaveErrorByOrderId((prev) => {
       if (!prev[order.id]) return prev
@@ -348,27 +414,33 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     })
     try {
       const itemUpdates = order.items
-        .map((item, idx) => ({
+        .map((item) => ({
           itemId: item.itemId!,
-          price: parseAdjustedPrice(priceArr[idx], item.price),
-          quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[idx], item.quantity),
-          note: noteArr[idx] !== undefined ? (noteArr[idx] ?? null) : item.note,
+          price: parseAdjustedPrice(priceMap[item.itemId!], item.price),
+          quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[item.itemId!], item.quantity),
+          paymentMethod: paymentMethodMap[item.itemId!] ?? item.paymentMethod,
+          note: noteMap[item.itemId!] !== undefined ? (noteMap[item.itemId!] ?? null) : item.note,
         }))
-        .filter((u, idx) => {
-          const priceChanged = u.price !== order.items[idx].price
-          const quantityChanged = u.quantity !== order.items[idx].quantity
-          const noteChanged  = u.note  !== order.items[idx].note
-          return priceChanged || quantityChanged || noteChanged
+        .filter((u) => {
+          const originalItem = order.items.find((item) => item.itemId === u.itemId)
+          if (!originalItem) return false
+          const priceChanged = u.price !== originalItem.price
+          const quantityChanged = u.quantity !== originalItem.quantity
+          const paymentMethodChanged = u.paymentMethod !== originalItem.paymentMethod
+          const noteChanged  = u.note  !== originalItem.note
+          return priceChanged || quantityChanged || paymentMethodChanged || noteChanged
         })
-      const newBaseTotal = order.items.reduce((sum, item, idx) => {
-        const p = parseAdjustedPrice(priceArr[idx], item.price)
-        const q = parseAdjustedQuantity(adjustedQuantities[order.id]?.[idx], item.quantity)
-        return sum + p * q
+      const nextItems = order.items.map((item) => ({
+        ...item,
+        price: parseAdjustedPrice(priceMap[item.itemId!], item.price),
+        quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[item.itemId!], item.quantity),
+        paymentMethod: paymentMethodMap[item.itemId!] ?? item.paymentMethod,
+      }))
+      const newTotal = nextItems.reduce((sum, item) => {
+        return sum + getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, appliedMileageRate)
       }, 0)
-      const newTotal = order.mileageRate
-        ? Math.round(newBaseTotal * order.mileageRate)
-        : newBaseTotal
-      await updateItemPrices(order.id, itemUpdates, newTotal)
+      const nextOrderPaymentMethod = deriveOrderPaymentMethod(nextItems)
+      await updateItemPrices(order.id, itemUpdates, newTotal, nextOrderPaymentMethod, nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate)
       const adjustmentEntries = itemUpdates
         .map((update) => {
           const item = order.items.find((current) => current.itemId === update.itemId)
@@ -406,19 +478,48 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
     const remainingItems = order.items.filter((_, itemIdx) => itemIdx !== idx)
     const deleteWholeOrder = remainingItems.length === 0
-    const newBaseTotal = remainingItems.reduce((sum, item, itemIdx) => {
-      const originalIdx = order.items.findIndex((candidate) => candidate.itemId === item.itemId)
-      const price = parseAdjustedPrice(adjustedPrices[order.id]?.[originalIdx], item.price)
-      const quantity = parseAdjustedQuantity(adjustedQuantities[order.id]?.[originalIdx], item.quantity)
-      return sum + price * quantity
+    const appliedMileageRate = order.mileageRate ?? mileageRate
+    const nextItems = remainingItems.map((item) => ({
+      ...item,
+      price: parseAdjustedPrice(adjustedPrices[order.id]?.[item.itemId!], item.price),
+      quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[item.itemId!], item.quantity),
+      paymentMethod: adjustedPaymentMethods[order.id]?.[item.itemId!] ?? item.paymentMethod,
+    }))
+    const newTotal = nextItems.reduce((sum, item) => {
+      return sum + getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, appliedMileageRate)
     }, 0)
-    const newTotal = order.mileageRate
-      ? Math.round(newBaseTotal * order.mileageRate)
-      : newBaseTotal
+    const nextOrderPaymentMethod = deriveOrderPaymentMethod(nextItems)
 
     setDeletingItemKey(target.itemId)
     try {
-      await deleteOrderItem(order.id, target.itemId, newTotal, deleteWholeOrder)
+      await deleteOrderItem(
+        order.id,
+        target.itemId,
+        newTotal,
+        nextOrderPaymentMethod,
+        nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate,
+        deleteWholeOrder
+      )
+      setAdjustedPrices((prev) => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[target.itemId!]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedQuantities((prev) => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[target.itemId!]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedNotes((prev) => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[target.itemId!]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedPaymentMethods((prev) => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[target.itemId!]
+        return { ...prev, [order.id]: next }
+      })
       if (deleteWholeOrder) {
         setExpandedOrder((current) => (current === order.id ? null : current))
       }
@@ -572,16 +673,27 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
     const title = mode === 'estimate' ? '매입 견적서' : '매입 지급 확인서'
     const statusLabel = mode === 'estimate' ? '견적' : '지급'
+    const cashItems = order.items.filter((item) => item.paymentMethod === 'cash')
+    const mileageItems = order.items.filter((item) => item.paymentMethod === 'mileage')
+    const cashTotal = cashItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const mileageBaseTotal = mileageItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const mileageAppliedTotal = order.mileageRate
-      ? Math.round(order.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * order.mileageRate)
+      ? mileageItems.reduce((sum, item) => sum + Math.round(item.price * item.quantity * order.mileageRate!), 0)
       : null
     const mileagePercent = order.mileageRate ? Math.round((order.mileageRate - 1) * 100) : null
+    const paymentMethodLabel =
+      order.paymentMethod === 'mixed'
+        ? '현금 + 마일리지'
+        : order.paymentMethod === 'mileage'
+          ? '마일리지'
+          : '현금'
     const itemRows = order.items.map((item) => `
       <tr>
         <td>${item.cardName}</td>
         <td>${item.rarity}</td>
         <td>${item.quantity}</td>
         <td>${formatPrice(item.price)}</td>
+        <td>${item.paymentMethod === 'mileage' ? '마일리지' : '현금'}</td>
         <td>${item.note ?? ''}</td>
       </tr>
     `).join('')
@@ -672,8 +784,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const statsOrders     = statsRange === 'today' ? orders.filter(o => new Date(o.createdAt).toDateString() === todayStr) : orders
   const statsTotal      = statsOrders.reduce((sum, o) => sum + o.totalPrice, 0)
   const statsPaidTotal  = statsOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
-  const statsCashCount  = statsOrders.filter(o => o.paymentMethod === 'cash').length
-  const statsMileageCount = statsOrders.filter(o => o.paymentMethod === 'mileage').length
+  const statsCashCount  = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'cash').length
+  const statsMileageCount = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'mileage').length
+  const statsMixedCount = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'mixed').length
 
   const topCardsMap = new Map<string, { cardName: string; rarity: string; count: number; totalPrice: number }>()
   for (const order of statsOrders.filter(o => o.status !== 'rejected')) {
@@ -792,25 +905,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const priceArr = adjustedPrices[order.id]
                     const noteArr  = adjustedNotes[order.id]
                     const quantityArr = adjustedQuantities[order.id]
+                    const paymentMethodArr = adjustedPaymentMethods[order.id]
                     const saveError = saveErrorByOrderId[order.id]
                     const pricesChanged = priceArr
-                      ? order.items.some((item, idx) => {
-                          const v = priceArr[idx]
+                      ? order.items.some((item) => {
+                          const v = priceArr[item.itemId!]
                           return v !== undefined && v !== '' && parseFloat(v) !== item.price
                         })
                       : false
                     const quantitiesChanged = quantityArr
-                      ? order.items.some((item, idx) => {
-                          const v = quantityArr[idx]
+                      ? order.items.some((item) => {
+                          const v = quantityArr[item.itemId!]
                           return v !== undefined && v !== '' && parseAdjustedQuantity(v, item.quantity) !== item.quantity
                         })
                       : false
                     const notesChanged = noteArr
-                      ? order.items.some((item, idx) => noteArr[idx] !== undefined && noteArr[idx] !== item.note)
+                      ? order.items.some((item) => noteArr[item.itemId!] !== undefined && noteArr[item.itemId!] !== item.note)
                       : false
-                    const hasChanges = pricesChanged || quantitiesChanged || notesChanged
+                    const paymentMethodsChanged = paymentMethodArr
+                      ? order.items.some((item) => paymentMethodArr[item.itemId!] !== undefined && paymentMethodArr[item.itemId!] !== item.paymentMethod)
+                      : false
+                    const hasChanges = pricesChanged || quantitiesChanged || notesChanged || paymentMethodsChanged
                     const isAdjusted = adjustedOrderIds.has(order.id)
                     const orderAuditEntries = priceAdjustmentsByOrderId[order.id] ?? []
+                    const effectiveOrderPaymentMethod = deriveOrderPaymentMethod(
+                      order.items.map((item) => ({
+                        paymentMethod: paymentMethodArr?.[item.itemId!] ?? item.paymentMethod,
+                      }))
+                    )
 
                     return (
                       <div key={order.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-800/50">
@@ -823,13 +945,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             } else {
                               setExpandedOrder(order.id)
                               setAdjustedPrices(prev => ({
-                                ...prev, [order.id]: order.items.map(i => String(i.price)),
+                                ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, String(i.price)])),
                               }))
                               setAdjustedQuantities(prev => ({
-                                ...prev, [order.id]: order.items.map(i => String(i.quantity)),
+                                ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, String(i.quantity)])),
                               }))
                               setAdjustedNotes(prev => ({
-                                ...prev, [order.id]: order.items.map(i => i.note ?? undefined),
+                                ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, i.note ?? undefined])),
+                              }))
+                              setAdjustedPaymentMethods(prev => ({
+                                ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, i.paymentMethod])),
                               }))
                             }
                           }}
@@ -841,13 +966,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               } else {
                                 setExpandedOrder(order.id)
                                 setAdjustedPrices(prev => ({
-                                  ...prev, [order.id]: order.items.map(i => String(i.price)),
+                                  ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, String(i.price)])),
                                 }))
                                 setAdjustedQuantities(prev => ({
-                                  ...prev, [order.id]: order.items.map(i => String(i.quantity)),
+                                  ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, String(i.quantity)])),
                                 }))
                                 setAdjustedNotes(prev => ({
-                                  ...prev, [order.id]: order.items.map(i => i.note ?? undefined),
+                                  ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, i.note ?? undefined])),
+                                }))
+                                setAdjustedPaymentMethods(prev => ({
+                                  ...prev, [order.id]: Object.fromEntries(order.items.map(i => [i.itemId!, i.paymentMethod])),
                                 }))
                               }
                             }
@@ -874,7 +1002,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{order.bankName}</span>
                                 <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" />{order.accountNumber}</span>
                                 <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{order.phoneNumber}</span>
-                                {order.paymentMethod === 'mileage' && (
+                                {effectiveOrderPaymentMethod === 'mileage' && (
                                   <span className="flex items-center gap-1 text-emerald-400"><Coins className="h-3 w-3" />마일리지</span>
                                 )}
                               </div>
@@ -906,7 +1034,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               <Printer className="h-4 w-4" />
                             </button>
                             <div className="text-right">
-                              <p className={`text-lg font-bold ${order.paymentMethod === 'mileage' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                              <p className={`text-lg font-bold ${effectiveOrderPaymentMethod === 'mileage' ? 'text-emerald-400' : effectiveOrderPaymentMethod === 'mixed' ? 'text-violet-300' : 'text-amber-500'}`}>
                                 {formatPrice(order.totalPrice)}
                               </p>
                               <p className="text-xs text-zinc-500">{formatDate(order.createdAt)}</p>
@@ -922,17 +1050,20 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
                                 const cardImg = item.cardId ? cards.find(c => c.id === item.cardId)?.imageUrl : undefined
-                                const savedPrice = priceArr?.[idx]
-                                const savedQuantity = quantityArr?.[idx]
+                                const savedPrice = item.itemId ? priceArr?.[item.itemId] : undefined
+                                const savedQuantity = item.itemId ? quantityArr?.[item.itemId] : undefined
+                                const savedPaymentMethod = item.itemId ? paymentMethodArr?.[item.itemId] : undefined
                                 const displayPrice = savedPrice !== undefined ? (parseFloat(savedPrice) || item.price) : item.price
                                 const displayQuantity = savedQuantity !== undefined ? parseAdjustedQuantity(savedQuantity, item.quantity) : item.quantity
-                                const displayNote  = noteArr?.[idx] !== undefined ? noteArr[idx] : item.note
+                                const displayPaymentMethod = savedPaymentMethod ?? item.paymentMethod
+                                const displayNote  = item.itemId && noteArr?.[item.itemId] !== undefined ? noteArr[item.itemId] : item.note
                                 const isPriceChanged = savedPrice !== undefined && parseFloat(savedPrice) !== item.price
                                 const isQuantityChanged = savedQuantity !== undefined && parseAdjustedQuantity(savedQuantity, item.quantity) !== item.quantity
-                                const isItemEditing = editingItem?.orderId === order.id && editingItem?.idx === idx
+                                const isPaymentMethodChanged = savedPaymentMethod !== undefined && savedPaymentMethod !== item.paymentMethod
+                                const isItemEditing = editingItem?.orderId === order.id && editingItem?.itemId === item.itemId
 
                                 return (
-                                  <div key={idx} className="rounded-lg bg-zinc-900">
+                                  <div key={item.itemId ?? `${item.cardId}-${item.rarity}-${idx}`} className="rounded-lg bg-zinc-900">
                                     <div className="flex items-center gap-2 p-2">
                                       <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
                                         {cardImg ? (
@@ -943,6 +1074,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                       <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
                                       <div className="min-w-0 flex-1">
                                         <span className="block truncate text-sm text-white">{item.cardName}</span>
+                                        <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${displayPaymentMethod === 'mileage' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                                          {displayPaymentMethod === 'mileage' ? <Coins className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+                                          {displayPaymentMethod === 'mileage' ? '마일리지' : '현금'}
+                                        </span>
                                         {displayNote && (
                                           <span className="flex items-center gap-1 text-xs text-sky-400/70">
                                             <MessageSquare className="h-3 w-3" />{displayNote}
@@ -959,15 +1094,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                             {formatPrice(item.price * item.quantity)}
                                           </span>
                                         )}
-                                        <span className={`text-sm font-medium ${isPriceChanged || isQuantityChanged ? 'text-sky-400' : 'text-zinc-300'}`}>
-                                          {formatPrice(displayPrice * displayQuantity)}
+                                        <span className={`text-sm font-medium ${isPriceChanged || isQuantityChanged || isPaymentMethodChanged ? 'text-sky-400' : 'text-zinc-300'}`}>
+                                          {formatPrice(getAppliedItemTotal(displayPrice, displayQuantity, displayPaymentMethod, order.mileageRate ?? mileageRate))}
                                         </span>
                                       </div>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           if (isItemEditing) setEditingItem(null)
-                                          else openEditItem(order.id, idx, item.price, item.quantity, item.note)
+                                          else if (item.itemId) openEditItem(order.id, item.itemId, item.price, item.quantity, item.note, item.paymentMethod)
                                         }}
                                         className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                                           isItemEditing ? 'bg-zinc-600 text-zinc-300' : 'bg-zinc-700/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'
@@ -1035,6 +1170,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                               <Plus className="h-3 w-3" />
                                             </button>
                                           </div>
+                                          <div className="min-w-[168px]">
+                                            <PaymentMethodToggle
+                                              value={editingPaymentMethod}
+                                              onChange={setEditingPaymentMethod}
+                                              compact
+                                            />
+                                          </div>
                                           <div className="flex gap-1 ml-auto">
                                             <button
                                               onClick={(e) => { e.stopPropagation(); handleDeleteItem(order, idx) }}
@@ -1045,7 +1187,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                               삭제
                                             </button>
                                             <button
-                                              onClick={(e) => { e.stopPropagation(); confirmEditItem(order.id, idx) }}
+                                              onClick={(e) => { e.stopPropagation(); item.itemId && confirmEditItem(order.id, item.itemId) }}
                                               className="flex items-center gap-1 rounded-lg bg-sky-500/20 px-3 py-1.5 text-xs font-medium text-sky-400 hover:bg-sky-500/30"
                                             >
                                               <Check className="h-3 w-3" />확인

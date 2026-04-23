@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, shell } = require('electron')
 const serve = require('electron-serve')
 const path = require('path')
 const fs = require('fs')
@@ -49,6 +49,22 @@ function createWindow() {
     win.webContents.openDevTools({ mode: 'detach' })
   }
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url)
+      return { action: 'deny' }
+    }
+
+    return { action: 'allow' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (/^https?:\/\//i.test(url)) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   return win
 }
 
@@ -63,3 +79,8 @@ app.on('window-all-closed', () => {
 })
 
 ipcMain.handle('verify-pin', (_, pin) => pin === config.adminPin)
+ipcMain.handle('open-external', async (_, url) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false
+  await shell.openExternal(url)
+  return true
+})

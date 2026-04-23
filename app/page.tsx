@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useIsFetching } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Settings, ShoppingCart, Search, Wifi, WifiOff, RefreshCw, X } from 'lucide-react'
-import { FullWidthGrid } from '@/components/full-width-grid'
+import { RefreshCw, Search, Settings, ShoppingCart, Wifi, WifiOff, X } from 'lucide-react'
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { CartListModal } from '@/components/cart-list-modal'
+import { FullWidthGrid } from '@/components/full-width-grid'
 import { GlobalAdminModal } from '@/components/global-admin-modal'
 import { PinAuthOverlay } from '@/components/pin-auth-overlay'
+import { VersionChip } from '@/components/version-chip'
 import { useCart } from '@/lib/use-cart'
 import { type CardWithStatus } from '@/lib/mock-cards'
 import { useStoreSettings } from '@/lib/use-settings'
@@ -59,28 +60,31 @@ export default function POSPage() {
       </main>
 
       <div className="pointer-events-none fixed left-6 top-4 z-30">
-        <div className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.35)] backdrop-blur-md ${
-          !isOnline
-            ? 'border-red-500/40 bg-red-500/15 text-red-200'
-            : isFetching
-            ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
-            : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
-        }`}>
-          {!isOnline ? (
-            <WifiOff className="h-4 w-4" />
-          ) : isFetching ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Wifi className="h-4 w-4" />
-          )}
-          <span>
-            {!isOnline ? '오프라인' : isFetching ? '동기화 중' : '동기화 정상'}
-          </span>
-          {lastUpdatedAt && (
-            <span className="text-[11px] opacity-80">
-              {new Date(lastUpdatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
+        <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.35)] backdrop-blur-md ${
+              !isOnline
+                ? 'border-red-500/40 bg-red-500/15 text-red-200'
+                : isFetching
+                  ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
+                  : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+            }`}
+          >
+            {!isOnline ? (
+              <WifiOff className="h-4 w-4" />
+            ) : isFetching ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wifi className="h-4 w-4" />
+            )}
+            <span>{!isOnline ? '오프라인' : isFetching ? '동기화 중' : '동기화 정상'}</span>
+            {lastUpdatedAt && (
+              <span className="text-[11px] opacity-80">
+                {new Date(lastUpdatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+          <VersionChip />
         </div>
       </div>
 
@@ -136,9 +140,7 @@ export default function POSPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {cartModalOpen && (
-          <CartListModal key="cart" onClose={() => setCartModalOpen(false)} />
-        )}
+        {cartModalOpen && <CartListModal key="cart" onClose={() => setCartModalOpen(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -151,18 +153,13 @@ export default function POSPage() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
           >
-            <PinAuthOverlay
-              onSuccess={handleGlobalPinSuccess}
-              onCancel={() => setShowGlobalPinOverlay(false)}
-            />
+            <PinAuthOverlay onSuccess={handleGlobalPinSuccess} onCancel={() => setShowGlobalPinOverlay(false)} />
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {globalAdminModalOpen && (
-          <GlobalAdminModal key="admin" onClose={() => setGlobalAdminModalOpen(false)} />
-        )}
+        {globalAdminModalOpen && <GlobalAdminModal key="admin" onClose={() => setGlobalAdminModalOpen(false)} />}
       </AnimatePresence>
     </div>
   )

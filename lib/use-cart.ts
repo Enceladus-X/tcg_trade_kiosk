@@ -30,7 +30,7 @@ function getSnapshot(): CartItem[] {
 // Cart actions
 function addItem(item: Omit<CartItem, 'quantity'>) {
   const existingIndex = cartStore.items.findIndex(
-    i => i.cardId === item.cardId && i.rarity === item.rarity
+    i => i.cardId === item.cardId && i.rarity === item.rarity && i.paymentMethod === item.paymentMethod
   )
 
   if (existingIndex >= 0) {
@@ -45,23 +45,54 @@ function addItem(item: Omit<CartItem, 'quantity'>) {
   emitChange()
 }
 
-function updateQuantity(cardId: string, rarity: string, quantity: number) {
+function updateQuantity(cardId: string, rarity: string, paymentMethod: CartItem['paymentMethod'], quantity: number) {
   if (quantity <= 0) {
     // Remove item if quantity is 0 or less
     cartStore.items = cartStore.items.filter(
-      i => !(i.cardId === cardId && i.rarity === rarity)
+      i => !(i.cardId === cardId && i.rarity === rarity && i.paymentMethod === paymentMethod)
     )
   } else {
     cartStore.items = cartStore.items.map(i =>
-      i.cardId === cardId && i.rarity === rarity ? { ...i, quantity } : i
+      i.cardId === cardId && i.rarity === rarity && i.paymentMethod === paymentMethod ? { ...i, quantity } : i
     )
   }
   emitChange()
 }
 
-function removeItem(cardId: string, rarity: string) {
+function updatePaymentMethod(cardId: string, rarity: string, paymentMethod: CartItem['paymentMethod'], nextPaymentMethod: CartItem['paymentMethod']) {
+  if (paymentMethod === nextPaymentMethod) return
+
+  const sourceIndex = cartStore.items.findIndex(
+    i => i.cardId === cardId && i.rarity === rarity && i.paymentMethod === paymentMethod
+  )
+  const sourceItem = sourceIndex >= 0 ? cartStore.items[sourceIndex] : undefined
+  if (!sourceItem) return
+
+  const targetIndex = cartStore.items.findIndex(
+    i => i.cardId === cardId && i.rarity === rarity && i.paymentMethod === nextPaymentMethod
+  )
+
+  if (targetIndex >= 0) {
+    cartStore.items = cartStore.items
+      .filter((_, idx) => idx !== sourceIndex)
+      .map((item, idx) => {
+        const normalizedTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+        return idx === normalizedTargetIndex
+          ? { ...item, quantity: item.quantity + sourceItem.quantity }
+          : item
+      })
+  } else {
+    cartStore.items = cartStore.items.map((item, idx) =>
+      idx === sourceIndex ? { ...sourceItem, paymentMethod: nextPaymentMethod } : item
+    )
+  }
+
+  emitChange()
+}
+
+function removeItem(cardId: string, rarity: string, paymentMethod: CartItem['paymentMethod']) {
   cartStore.items = cartStore.items.filter(
-    i => !(i.cardId === cardId && i.rarity === rarity)
+    i => !(i.cardId === cardId && i.rarity === rarity && i.paymentMethod === paymentMethod)
   )
   emitChange()
 }
@@ -84,6 +115,7 @@ export function useCart() {
     totalQuantity,
     addItem: useCallback(addItem, []),
     updateQuantity: useCallback(updateQuantity, []),
+    updatePaymentMethod: useCallback(updatePaymentMethod, []),
     removeItem: useCallback(removeItem, []),
     clearCart: useCallback(clearCart, []),
   }

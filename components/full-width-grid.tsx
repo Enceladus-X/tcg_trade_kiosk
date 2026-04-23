@@ -169,6 +169,33 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
     })
   }, [cards, activeTab, isAllTabsSelected, selectedRarity, visibleTabs, searchQuery])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const preloadTargets = filteredCards
+      .slice(0, 48)
+      .map((card) => card.imageUrl)
+      .filter(Boolean)
+
+    if (preloadTargets.length === 0) return
+
+    const preload = () => {
+      preloadTargets.forEach((src) => {
+        const image = new window.Image()
+        image.decoding = 'async'
+        image.src = src
+      })
+    }
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(() => preload(), { timeout: 1200 })
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timeoutId = window.setTimeout(preload, 180)
+    return () => window.clearTimeout(timeoutId)
+  }, [filteredCards])
+
   return (
     <div className="flex h-full flex-col">
       <div className="sticky top-0 z-10 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-sm">
@@ -430,6 +457,7 @@ function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void
 const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   N: { bg: 'rgba(82,82,91,0.95)', color: '#e4e4e7' },
   R: { bg: 'rgba(37,99,235,0.95)', color: '#fff' },
+  P: { bg: 'linear-gradient(132deg, rgba(202,240,255,0.96) 0%, rgba(214,225,255,0.96) 18%, rgba(245,214,255,0.94) 36%, rgba(255,236,214,0.92) 54%, rgba(220,255,244,0.92) 74%, rgba(213,228,255,0.96) 100%)', color: '#ffffff' },
   SR: { bg: 'rgba(217,119,6,0.95)', color: '#000' },
   UR: { bg: 'rgba(225,29,72,0.95)', color: '#fff' },
   UL: { bg: 'rgba(147,51,234,0.95)', color: '#fff' },
@@ -449,6 +477,7 @@ const EXTRA_BADGE: { bg: string; color: string }[] = [
 const RARITY_PRICE_COLOR: Record<string, string> = {
   N: '#a1a1aa',
   R: '#93c5fd',
+  P: '#fff4ff',
   SR: '#fcd34d',
   UR: '#fda4af',
   UL: '#d8b4fe',
@@ -466,12 +495,46 @@ function strHashGrid(value: string): number {
   return Math.abs(hash)
 }
 
+function isPrismRarityGrid(rarity: string) {
+  const normalized = rarity.trim().toLowerCase()
+  return normalized === 'p' || rarity.includes('★')
+}
+
 function getBadge(rarity: string) {
+  if (isPrismRarityGrid(rarity)) {
+    return {
+      bg: 'linear-gradient(132deg, rgba(202,240,255,0.96) 0%, rgba(214,225,255,0.96) 18%, rgba(245,214,255,0.94) 36%, rgba(255,236,214,0.92) 54%, rgba(220,255,244,0.92) 74%, rgba(213,228,255,0.96) 100%)',
+      color: '#31265d',
+    }
+  }
   return RARITY_BADGE[rarity] ?? EXTRA_BADGE[strHashGrid(rarity) % EXTRA_BADGE.length]
+}
+
+function getBadgeTextStyle(rarity: string) {
+  if (isPrismRarityGrid(rarity)) {
+    return {
+      WebkitTextStroke: '0.45px rgba(255,255,255,0.72)',
+      textShadow: '0 1px 0 rgba(255,255,255,0.82), 0 1px 4px rgba(255,255,255,0.15)',
+    } as const
+  }
+
+  return undefined
 }
 
 function getPriceColor(rarity: string) {
   return RARITY_PRICE_COLOR[rarity] ?? EXTRA_PRICE_COLOR[strHashGrid(rarity) % EXTRA_PRICE_COLOR.length]
+}
+
+function getPriceStyle(rarity: string) {
+  if (isPrismRarityGrid(rarity)) {
+    return {
+      color: '#d9c2ff',
+      WebkitTextStroke: '0.85px rgba(37,28,74,0.96)',
+      textShadow: '0 1px 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.62), 0 0 10px rgba(130,235,255,0.16)',
+    } as const
+  }
+
+  return { color: getPriceColor(rarity) }
 }
 
 function PriceOverlay({ prices }: { prices: CardPrice[] }) {
@@ -485,18 +548,19 @@ function PriceOverlay({ prices }: { prices: CardPrice[] }) {
       <div className="flex flex-col items-end gap-1">
         {sorted.map((price) => {
           const badge = getBadge(price.rarity)
-          const priceColor = getPriceColor(price.rarity)
+          const badgeTextStyle = getBadgeTextStyle(price.rarity)
+          const priceStyle = getPriceStyle(price.rarity)
           return (
             <div key={price.rarity} className="flex items-center gap-1.5">
               <span
                 className="shrink-0 rounded px-2 py-1 text-sm font-black leading-none"
-                style={{ background: badge.bg, color: badge.color }}
+                style={{ background: badge.bg, color: badge.color, ...badgeTextStyle }}
               >
                 {price.rarity}
               </span>
               <span
                 className="text-3xl font-black leading-none tracking-tight drop-shadow-[0_1px_6px_rgba(0,0,0,1)]"
-                style={{ color: priceColor }}
+                style={priceStyle}
               >
                 {formatPrice(price.price)}
               </span>

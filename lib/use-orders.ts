@@ -3,10 +3,11 @@
 import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
-import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus } from './mock-cards'
+import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus, type PaymentMethod, type OrderPaymentMethod } from './mock-cards'
 import { type DbOrder, type DbOrderItemAdjustment } from './database.types'
 
 const LOCAL_ORDER_ITEM_NOTES_KEY = 'tcg-trade-kiosk.order-item-notes'
+const LOCAL_ORDER_ITEM_PAYMENT_METHODS_KEY = 'tcg-trade-kiosk.order-item-payment-methods'
 
 function readLocalOrderItemNotes(): Record<string, string> {
   if (typeof window === 'undefined') return {}
@@ -25,9 +26,65 @@ function writeLocalOrderItemNotes(notesByItemId: Record<string, string>) {
   window.localStorage.setItem(LOCAL_ORDER_ITEM_NOTES_KEY, JSON.stringify(notesByItemId))
 }
 
+function readLocalOrderItemPaymentMethods(): Record<string, PaymentMethod> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(LOCAL_ORDER_ITEM_PAYMENT_METHODS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, PaymentMethod> : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeLocalOrderItemPaymentMethods(paymentMethodsByItemId: Record<string, PaymentMethod>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(LOCAL_ORDER_ITEM_PAYMENT_METHODS_KEY, JSON.stringify(paymentMethodsByItemId))
+}
+
+function deriveOrderPaymentMethod(items: Pick<CartItem, 'paymentMethod'>[]): OrderPaymentMethod {
+  const hasCash = items.some((item) => item.paymentMethod === 'cash')
+  const hasMileage = items.some((item) => item.paymentMethod === 'mileage')
+  if (hasCash && hasMileage) return 'mixed'
+  if (hasMileage) return 'mileage'
+  return 'cash'
+}
+
+function getPersistedOrderPaymentMethod(paymentMethod: OrderPaymentMethod): PaymentMethod {
+  if (paymentMethod === 'mixed') return 'cash'
+  return paymentMethod
+}
+
+function calculateOrderTotal(items: Pick<CartItem, 'price' | 'quantity' | 'paymentMethod'>[], mileageRate: number | null | undefined) {
+  return items.reduce((sum, item) => {
+    const subtotal = item.price * item.quantity
+    if (item.paymentMethod === 'mileage') {
+      return sum + Math.round(subtotal * (mileageRate ?? 1))
+    }
+    return sum + subtotal
+  }, 0)
+}
+
 // --- 타입 변환 ---
 
-function dbToOrder(row: DbOrder, localNotesByItemId: Record<string, string>): PendingOrder {
+function dbToOrder(
+  row: DbOrder,
+  localNotesByItemId: Record<string, string>,
+  localPaymentMethodsByItemId: Record<string, PaymentMethod>
+): PendingOrder {
+  const items = (row.order_items ?? []).map(item => ({
+    itemId: item.id,
+    cardId: item.card_id ?? '',
+    cardName: item.card_name,
+    cardCode: item.card_code,
+    rarity: item.rarity,
+    price: item.price,
+    quantity: item.quantity,
+    paymentMethod: ('payment_method' in item ? item.payment_method : undefined) ?? localPaymentMethodsByItemId[item.id] ?? (row.payment_method === 'mileage' ? 'mileage' : 'cash'),
+    note: ('note' in item ? item.note : undefined) ?? localNotesByItemId[item.id] ?? null,
+  }))
+
   return {
     id: row.id,
     createdAt: row.created_at,
@@ -37,18 +94,9 @@ function dbToOrder(row: DbOrder, localNotesByItemId: Record<string, string>): Pe
     phoneNumber: row.phone_number,
     totalPrice: row.total_price,
     status: row.status,
-    paymentMethod: row.payment_method,
+    paymentMethod: deriveOrderPaymentMethod(items),
     mileageRate: row.mileage_rate,
-    items: (row.order_items ?? []).map(item => ({
-      itemId: item.id,
-      cardId: item.card_id ?? '',
-      cardName: item.card_name,
-      cardCode: item.card_code,
-      rarity: item.rarity,
-      price: item.price,
-      quantity: item.quantity,
-      note: ('note' in item ? item.note : undefined) ?? localNotesByItemId[item.id] ?? null,
-    })),
+    items,
   }
 }
 
@@ -56,6 +104,12 @@ function isMissingNoteColumnError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const maybeError = error as { code?: string; message?: string }
   return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && maybeError.message.includes("'note' column")
+}
+
+function isMissingPaymentMethodColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && maybeError.message.includes("'payment_method' column")
 }
 
 const ORDERS_KEY = ['orders'] as const
@@ -111,7 +165,8 @@ export function useOrders() {
         .order('created_at', { ascending: false })
       if (error) throw error
       const localNotesByItemId = readLocalOrderItemNotes()
-      return (data as DbOrder[]).map((row) => dbToOrder(row, localNotesByItemId))
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+      return (data as DbOrder[]).map((row) => dbToOrder(row, localNotesByItemId, localPaymentMethodsByItemId))
     },
   })
 
@@ -157,14 +212,16 @@ export function useOrders() {
       customerData: CheckoutFormData
       mileageRate?: number
     }) => {
-      const baseTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const isMileage = customerData.paymentMethod === 'mileage'
-      const finalTotal = isMileage && mileageRate ? Math.round(baseTotal * mileageRate) : baseTotal
+      const orderPaymentMethod = deriveOrderPaymentMethod(items)
+      const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
+      const hasCashItems = items.some((item) => item.paymentMethod === 'cash')
+      const hasMileageItems = items.some((item) => item.paymentMethod === 'mileage')
+      const finalTotal = calculateOrderTotal(items, hasMileageItems ? mileageRate : null)
 
       // 마일리지 결제는 은행/계좌 정보 불필요 → 빈 문자열로 저장
       // (orders.bank_name / account_number 가 NOT NULL 이므로 '' 사용)
-      const bankName = isMileage ? '' : customerData.bankName
-      const accountNumber = isMileage ? '' : customerData.accountNumber
+      const bankName = hasCashItems ? customerData.bankName : ''
+      const accountNumber = hasCashItems ? customerData.accountNumber : ''
 
       // 1단계: orders 행 삽입
       const { data: order, error: orderError } = await supabase
@@ -176,8 +233,8 @@ export function useOrders() {
           phone_number: customerData.phoneNumber,
           total_price: finalTotal,
           status: 'pending',
-          payment_method: customerData.paymentMethod,
-          mileage_rate: isMileage ? (mileageRate ?? null) : null,
+          payment_method: persistedOrderPaymentMethod,
+          mileage_rate: hasMileageItems ? (mileageRate ?? null) : null,
         })
         .select()
         .single()
@@ -185,19 +242,41 @@ export function useOrders() {
 
       // 2단계: order_items 일괄 삽입
       // card_name/card_code는 스냅샷 — 카드 삭제 후에도 주문 기록 보존
-      const { error: itemsError } = await supabase.from('order_items').insert(
-        items.map(item => ({
-          order_id: order.id,
-          card_id: item.cardId || null,
-          card_name: item.cardName,
-          card_code: item.cardCode,
-          rarity: item.rarity,
-          price: item.price,
-          quantity: item.quantity,
-          note: item.note ?? null,
-        }))
-      )
+      const itemPayload = items.map(item => ({
+        order_id: order.id,
+        card_id: item.cardId || null,
+        card_name: item.cardName,
+        card_code: item.cardCode,
+        rarity: item.rarity,
+        price: item.price,
+        quantity: item.quantity,
+        payment_method: item.paymentMethod,
+        note: item.note ?? null,
+      }))
+
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+
+      let { data: insertedItems, error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemPayload)
+        .select('id')
+
+      if (itemsError && isMissingPaymentMethodColumnError(itemsError)) {
+        ;({ data: insertedItems, error: itemsError } = await supabase
+          .from('order_items')
+          .insert(itemPayload.map(({ payment_method, ...rest }) => rest))
+          .select('id'))
+      }
       if (itemsError) throw itemsError
+
+      if (Array.isArray(insertedItems)) {
+        insertedItems.forEach((insertedItem, index) => {
+          if (insertedItem?.id) {
+            localPaymentMethodsByItemId[insertedItem.id] = items[index].paymentMethod
+          }
+        })
+        writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
+      }
 
       return order
     },
@@ -220,21 +299,28 @@ export function useOrders() {
       orderId,
       itemUpdates,
       newTotal,
+      orderPaymentMethod,
+      mileageRate,
     }: {
       orderId: string
-      itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null }[]
+      itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null; paymentMethod?: PaymentMethod }[]
       newTotal: number
+      orderPaymentMethod: OrderPaymentMethod
+      mileageRate: number | null
     }) => {
       const localNotesByItemId = readLocalOrderItemNotes()
-      for (const { itemId, price, quantity, note } of itemUpdates) {
-        const patch: { price: number; quantity?: number; note?: string | null } = { price }
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+      for (const { itemId, price, quantity, note, paymentMethod } of itemUpdates) {
+        const patch: { price: number; quantity?: number; note?: string | null; payment_method?: PaymentMethod } = { price }
         if (quantity !== undefined) patch.quantity = quantity
         if (note !== undefined) patch.note = note
+        if (paymentMethod !== undefined) patch.payment_method = paymentMethod
 
         let { error } = await supabase.from('order_items').update(patch).eq('id', itemId)
-        if (error && note !== undefined && isMissingNoteColumnError(error)) {
-          const fallbackPatch: { price: number; quantity?: number } = { price }
+        if (error && ((note !== undefined && isMissingNoteColumnError(error)) || (paymentMethod !== undefined && isMissingPaymentMethodColumnError(error)))) {
+          const fallbackPatch: { price: number; quantity?: number; note?: string | null } = { price }
           if (quantity !== undefined) fallbackPatch.quantity = quantity
+          if (note !== undefined && !isMissingNoteColumnError(error)) fallbackPatch.note = note
           ;({ error } = await supabase.from('order_items').update(fallbackPatch).eq('id', itemId))
         }
         if (error) throw error
@@ -243,10 +329,18 @@ export function useOrders() {
           if (note === null || note === '') delete localNotesByItemId[itemId]
           else localNotesByItemId[itemId] = note
         }
+        if (paymentMethod !== undefined) {
+          localPaymentMethodsByItemId[itemId] = paymentMethod
+        }
       }
-      const { error } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
+      const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
+      const { error } = await supabase
+        .from('orders')
+        .update({ total_price: newTotal, payment_method: persistedOrderPaymentMethod, mileage_rate: mileageRate })
+        .eq('id', orderId)
       if (error) throw error
       writeLocalOrderItemNotes(localNotesByItemId)
+      writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
     },
     onSuccess: invalidate,
   })
@@ -265,19 +359,26 @@ export function useOrders() {
       orderId,
       itemId,
       newTotal,
+      orderPaymentMethod,
+      mileageRate,
       deleteOrder,
     }: {
       orderId: string
       itemId: string
       newTotal: number
+      orderPaymentMethod: OrderPaymentMethod
+      mileageRate: number | null
       deleteOrder: boolean
     }) => {
       const localNotesByItemId = readLocalOrderItemNotes()
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
       const { error: itemError } = await supabase.from('order_items').delete().eq('id', itemId)
       if (itemError) throw itemError
 
       delete localNotesByItemId[itemId]
+      delete localPaymentMethodsByItemId[itemId]
       writeLocalOrderItemNotes(localNotesByItemId)
+      writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
 
       if (deleteOrder) {
         const { error: orderDeleteError } = await supabase.from('orders').delete().eq('id', orderId)
@@ -285,7 +386,11 @@ export function useOrders() {
         return
       }
 
-      const { error: orderError } = await supabase.from('orders').update({ total_price: newTotal }).eq('id', orderId)
+      const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_price: newTotal, payment_method: persistedOrderPaymentMethod, mileage_rate: mileageRate })
+        .eq('id', orderId)
       if (orderError) throw orderError
     },
     onSuccess: invalidate,
@@ -334,8 +439,14 @@ export function useOrders() {
       [updateStatusMutation]
     ),
     updateItemPrices: useCallback(
-      (orderId: string, itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null }[], newTotal: number) =>
-        updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal }),
+      (
+        orderId: string,
+        itemUpdates: { itemId: string; price: number; quantity?: number; note?: string | null; paymentMethod?: PaymentMethod }[],
+        newTotal: number,
+        orderPaymentMethod: OrderPaymentMethod,
+        mileageRate: number | null
+      ) =>
+        updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal, orderPaymentMethod, mileageRate }),
       [updateItemPricesMutation]
     ),
     createPriceAdjustments: useCallback(
@@ -348,8 +459,15 @@ export function useOrders() {
       [deleteMutation]
     ),
     deleteOrderItem: useCallback(
-      (orderId: string, itemId: string, newTotal: number, deleteOrder: boolean) =>
-        deleteOrderItemMutation.mutateAsync({ orderId, itemId, newTotal, deleteOrder }),
+      (
+        orderId: string,
+        itemId: string,
+        newTotal: number,
+        orderPaymentMethod: OrderPaymentMethod,
+        mileageRate: number | null,
+        deleteOrder: boolean
+      ) =>
+        deleteOrderItemMutation.mutateAsync({ orderId, itemId, newTotal, orderPaymentMethod, mileageRate, deleteOrder }),
       [deleteOrderItemMutation]
     ),
   }

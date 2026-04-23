@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Settings, Minus, Plus, Check, X, Save, ShoppingCart, Trash2 } from 'lucide-react'
-import { type CardWithStatus, type CardPrice, rarityColors, formatPrice } from '@/lib/mock-cards'
+import { type CardWithStatus, type CardPrice, getRarityColors, formatPrice } from '@/lib/mock-cards'
 import { useCart } from '@/lib/use-cart'
 import { useCards, useTabs } from '@/lib/use-cards'
 import { useGames } from '@/lib/use-games'
@@ -147,6 +147,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
         cardCode: card.code,
         rarity: selectedRarity,
         price: selectedPrice,
+        paymentMethod: 'cash',
       })
     }
 
@@ -465,7 +466,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
                       <p className="text-sm font-medium text-zinc-400">레어도 선택</p>
                       <div className="grid grid-cols-4 gap-3">
                         {availableRarities.map(({ rarity, price }) => {
-                          const colors = rarityColors[rarity] ?? { bg: 'bg-zinc-700', text: 'text-zinc-200', border: 'border-zinc-600' }
+                          const colors = getRarityColors(rarity)
                           const isSelected = selectedRarity === rarity
                           return (
                             <button

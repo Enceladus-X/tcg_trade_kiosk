@@ -5,6 +5,9 @@ export interface CardPrice {
   price: number
 }
 
+export type PaymentMethod = 'cash' | 'mileage'
+export type OrderPaymentMethod = PaymentMethod | 'mixed'
+
 export interface Card {
   id: string
   name: string
@@ -33,6 +36,7 @@ export interface CartItem {
   rarity: string
   price: number
   quantity: number
+  paymentMethod: PaymentMethod
   note?: string | null
 }
 
@@ -53,7 +57,7 @@ export interface PendingOrder {
   items: CartItem[]
   totalPrice: number
   status: OrderStatus
-  paymentMethod: 'cash' | 'mileage'
+  paymentMethod: OrderPaymentMethod
   mileageRate: number | null
 }
 
@@ -62,12 +66,12 @@ export interface CheckoutFormData {
   bankName: string
   accountNumber: string
   phoneNumber: string
-  paymentMethod: 'cash' | 'mileage'
 }
 
 export const rarityColors: Record<string, { bg: string; text: string; border: string }> = {
   N:   { bg: 'bg-zinc-700',    text: 'text-zinc-200',   border: 'border-zinc-600' },
   R:   { bg: 'bg-blue-900',    text: 'text-blue-200',   border: 'border-blue-700' },
+  P:   { bg: 'bg-[linear-gradient(132deg,rgba(202,240,255,0.94)_0%,rgba(214,225,255,0.94)_18%,rgba(245,214,255,0.92)_36%,rgba(255,236,214,0.9)_54%,rgba(220,255,244,0.9)_74%,rgba(213,228,255,0.94)_100%)]', text: 'text-slate-900 [text-shadow:0_1px_0_rgba(255,255,255,0.7)]', border: 'border-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_0_0_1px_rgba(160,190,255,0.24)]' },
   SR:  { bg: 'bg-amber-900',   text: 'text-amber-200',  border: 'border-amber-700' },
   UR:  { bg: 'bg-rose-900',    text: 'text-rose-200',   border: 'border-rose-700' },
   UL:  { bg: 'bg-purple-900',  text: 'text-purple-200', border: 'border-purple-700' },
@@ -89,6 +93,11 @@ function strHash(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
   return Math.abs(h)
+}
+
+export function isPrismRarity(rarity: string) {
+  const normalized = rarity.trim().toLowerCase()
+  return normalized === 'p' || rarity.includes('★')
 }
 
 export function getRarityColors(rarity: string) {
@@ -142,6 +151,14 @@ export function getRarityColors(rarity: string) {
     }
   }
 
+  if (isPrismRarity(rarity)) {
+    return {
+      bg: 'bg-[linear-gradient(132deg,rgba(202,240,255,0.94)_0%,rgba(214,225,255,0.94)_18%,rgba(245,214,255,0.92)_36%,rgba(255,236,214,0.9)_54%,rgba(220,255,244,0.9)_74%,rgba(213,228,255,0.94)_100%)]',
+      text: 'text-slate-900 [text-shadow:0_1px_0_rgba(255,255,255,0.7)]',
+      border: 'border border-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_0_0_1px_rgba(160,190,255,0.24)]',
+    }
+  }
+
   return rarityColors[rarity] ?? EXTRA_RARITY_COLORS[strHash(rarity) % EXTRA_RARITY_COLORS.length]
 }
 
@@ -152,7 +169,7 @@ function makePrices(raw: Partial<Record<CardPrice['rarity'], number>>): CardPric
 }
 
 function makeEnabledRarities(prices: CardPrice[]): Record<string, boolean> {
-  const all: CardPrice['rarity'][] = ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE']
+  const all: CardPrice['rarity'][] = ['N', 'R', 'P', 'SR', 'UR', 'UL', 'SE', 'PSE']
   const priced = new Set(prices.map(p => p.rarity))
   return Object.fromEntries(all.map(r => [r, priced.has(r)]))
 }
