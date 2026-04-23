@@ -6,7 +6,8 @@ const fs = require('fs')
 const isProd = app.isPackaged
 const loadURL = serve({ directory: path.join(__dirname, '..', 'out') })
 
-let config = { adminPin: '1234' }
+const DEFAULT_CONFIG = { adminPin: '' }
+let config = { ...DEFAULT_CONFIG }
 
 function getConfigPath() {
   return isProd
@@ -20,7 +21,7 @@ function loadConfig() {
     if (fs.existsSync(configPath)) {
       config = { ...config, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }
     } else {
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
+      fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8')
     }
   } catch (e) {
     console.error('config load error:', e)
@@ -78,7 +79,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-ipcMain.handle('verify-pin', (_, pin) => pin === config.adminPin)
+ipcMain.handle('verify-pin', (_, pin) => {
+  return typeof config.adminPin === 'string' && config.adminPin.length > 0 && pin === config.adminPin
+})
 ipcMain.handle('open-external', async (_, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false
   await shell.openExternal(url)

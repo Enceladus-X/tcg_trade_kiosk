@@ -14,6 +14,13 @@ import { useCart } from '@/lib/use-cart'
 import { type CardWithStatus } from '@/lib/mock-cards'
 import { useStoreSettings } from '@/lib/use-settings'
 
+const KST_TIME_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Seoul',
+})
+
 export default function POSPage() {
   const [selectedCard, setSelectedCard] = useState<CardWithStatus | null>(null)
   const [cartModalOpen, setCartModalOpen] = useState(false)
@@ -22,6 +29,7 @@ export default function POSPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isOnline, setIsOnline] = useState(true)
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
   const { totalQuantity } = useCart()
   const { lastUpdatedAt } = useStoreSettings()
   const isFetching = useIsFetching() > 0
@@ -37,6 +45,12 @@ export default function POSPage() {
       window.removeEventListener('offline', update)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isOnline || isFetching) return
+
+    setLastSyncedAt(new Date())
+  }, [isFetching, isOnline, lastUpdatedAt])
 
   const handleGlobalPinSuccess = () => {
     setShowGlobalPinOverlay(false)
@@ -78,9 +92,9 @@ export default function POSPage() {
               <Wifi className="h-4 w-4" />
             )}
             <span>{!isOnline ? '오프라인' : isFetching ? '동기화 중' : '동기화 정상'}</span>
-            {lastUpdatedAt && (
+            {lastSyncedAt && (
               <span className="text-[11px] opacity-80">
-                {new Date(lastUpdatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                {KST_TIME_FORMATTER.format(lastSyncedAt)} KST
               </span>
             )}
           </div>

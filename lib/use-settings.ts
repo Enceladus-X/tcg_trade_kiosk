@@ -8,7 +8,7 @@ import type { DbStoreSettings } from './database.types'
 export const SETTINGS_KEY = ['store_settings'] as const
 
 const DEFAULT_SETTINGS: Omit<DbStoreSettings, 'id' | 'updated_at'> = {
-  admin_password: '1234',
+  admin_password: '',
   mileage_rate: 1.2,
   global_rarities: ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'],
 }

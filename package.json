@@ -1,6 +1,6 @@
 {
   "name": "tcg-trade-kiosk",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "main": "electron/main.js",
   "pnpm": {
@@ -96,12 +96,6 @@
       "out/**",
       "electron/**",
       "node_modules/electron-serve/**"
-    ],
-    "extraFiles": [
-      {
-        "from": "config.json",
-        "to": "config.json"
-      }
     ],
     "win": {
       "icon": "build/icon.ico",

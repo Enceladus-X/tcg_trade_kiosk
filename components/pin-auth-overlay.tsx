@@ -12,9 +12,7 @@ interface PinAuthOverlayProps {
 export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
   const { adminPassword, isLoading, isError } = useStoreSettings()
 
-  // isError시 폴백: DB 연결 실패해도 무한 로딩 없이 기본 PIN 사용
-  const correctPin = isError ? '1234' : (adminPassword ?? '1234')
-  // 로딩 완료 전까지 입력 비활성화
+  const correctPin = adminPassword ?? ''
   const disabled = isLoading && !isError
 
   const [pin, setPin] = useState('')
@@ -29,10 +27,10 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
     if (newPin.length === 4) {
       let correct = false
       const api = (window as any).electronAPI
-      if (api?.verifyPin) {
+      if (isError && api?.verifyPin) {
         correct = await api.verifyPin(newPin)
       } else {
-        correct = newPin === correctPin
+        correct = correctPin.length > 0 && newPin === correctPin
       }
 
       if (correct) {
@@ -93,7 +91,7 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
             {isLoading && !isError ? '인증 정보 불러오는 중...' : 'Enter 4-digit PIN'}
           </p>
           {isError && (
-            <p className="mt-1 text-xs text-amber-400">오프라인 모드 - 기본 PIN 사용</p>
+            <p className="mt-1 text-xs text-amber-400">오프라인 모드 - 로컬 PIN 설정 필요</p>
           )}
         </div>
 
