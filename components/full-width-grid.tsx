@@ -199,186 +199,186 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
   return (
     <div className="flex h-full flex-col">
       <div className="sticky top-0 z-10 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-sm">
-        <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2">
-          <div className="w-fit max-w-[min(56vw,680px)] rounded-b-[2rem] border border-zinc-700/60 border-t-0 bg-zinc-950/84 px-8 py-3 shadow-[0_18px_34px_rgba(0,0,0,0.36)] backdrop-blur-xl">
-            <p className="truncate text-center text-[1.7rem] font-black tracking-tight text-amber-300 xl:text-[2rem]">
-              {`마린포드 ${selectedGameName ?? ''} 매입표`}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-stretch">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex min-h-[5rem] items-end px-3 pb-1 pt-2">
-              {isElectron && (
-                <button
-                  onClick={() => window.close()}
-                  aria-label="프로그램 종료"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
-                  title="프로그램 종료"
-                >
-                  <Power className="h-5 w-5" />
-                </button>
-              )}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 px-3 pb-2 pt-2">
+          <div className="flex min-h-[5.5rem] items-end gap-3">
+            {isElectron && (
+              <button
+                onClick={() => window.close()}
+                aria-label="프로그램 종료"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 transition-colors hover:border-red-900 hover:bg-red-950/50 hover:text-red-400"
+                title="프로그램 종료"
+              >
+                <Power className="h-5 w-5" />
+              </button>
+            )}
+            <div className="max-w-[min(52vw,34rem)] rounded-2xl border border-zinc-700/60 bg-zinc-950/90 px-6 py-3 shadow-[0_18px_34px_rgba(0,0,0,0.36)] backdrop-blur-xl">
+              <p className="truncate text-left text-[1.55rem] font-black tracking-tight text-amber-300 xl:text-[1.9rem]">
+                {`마린포드 ${selectedGameName ?? ''} 매입표`}
+              </p>
             </div>
+          </div>
 
-            <div className="flex min-h-[3rem] items-center gap-2 border-t border-zinc-800/60 px-3 py-1">
-              {searchOpen ? (
-                <div className="flex min-w-[220px] items-center gap-2 rounded-xl border border-amber-500/60 bg-zinc-900 px-3 py-2">
-                  <Search className="h-4 w-4 shrink-0 text-amber-400" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => onSearchQueryChange(e.target.value)}
-                    placeholder="카드 검색..."
-                    aria-label="카드 검색 입력"
-                    data-testid="search-input"
-                    className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => onSearchQueryChange('')}
-                      aria-label="검색어 지우기"
-                      className="text-zinc-500 hover:text-white"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="relative shrink-0" ref={tabMenuRef}>
-                  <button
-                    type="button"
-                    aria-label="하위 탭 선택"
-                    data-testid="tab-dropdown-trigger"
-                    onClick={() => setTabMenuOpen((open) => !open)}
-                    className="flex min-w-[220px] items-center justify-between rounded-xl border border-amber-400/60 bg-zinc-900 px-4 py-2 text-sm font-bold text-white shadow-[0_8px_22px_rgba(0,0,0,0.28)] transition-colors hover:border-amber-300"
-                  >
-                    <span className="truncate">{activeTabLabel || '탭 선택'}</span>
-                    <ChevronDown className={`h-4 w-4 shrink-0 text-amber-300 transition-transform ${tabMenuOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  <AnimatePresence>
-                    {tabMenuOpen && selectableTabs.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                        transition={{ duration: 0.18, ease: 'easeOut' }}
-                        className="absolute left-0 top-[calc(100%+8px)] z-30 min-w-[220px] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
-                      >
-                        {selectableTabs.map((tab, index) => {
-                          const isActive = tab.value === selectedTab || (tab.value === allTabsValue && isAllTabsSelected)
-                          return (
-                            <motion.button
-                              key={tab.value}
-                              type="button"
-                              data-testid={`tab-option-${tab.value}`}
-                              initial={{ opacity: 0, x: -6 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: index * 0.02, duration: 0.12 }}
-                              onClick={() => {
-                                setSelectedTab(tab.value)
-                                setTabMenuOpen(false)
-                              }}
-                              className={`block w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                                isActive ? 'bg-amber-500 text-black' : 'text-zinc-200 hover:bg-zinc-800'
-                              }`}
-                            >
-                              {tab.label}
-                            </motion.button>
-                          )
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-
+          <div className="min-w-0 self-end justify-self-end">
+            {hasGames && (
               <div
-                className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto"
+                className="flex max-w-full items-center justify-end gap-3 overflow-x-auto pb-1"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
               >
-                <button
-                  onClick={() => setSelectedRarity(null)}
-                  aria-label="전체 레어도 보기"
-                  data-testid="rarity-filter-all"
-                  className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                    selectedRarity === null
-                      ? 'bg-amber-500 text-black'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-                  }`}
-                >
-                  전체
-                </button>
-                {activeRarities.map((rarity) => {
-                  const colors = getRarityColors(rarity)
-                  const isSelected = selectedRarity === rarity
+                {games.map((game) => {
+                  const isSelected = game.id === selectedGame
+                  const hasImage = Boolean(game.imageUrl)
                   return (
                     <button
-                      key={rarity}
-                      onClick={() => setSelectedRarity(isSelected ? null : rarity)}
-                      aria-label={`${rarity} 레어도 필터`}
-                      data-testid={`rarity-filter-${rarity}`}
-                      className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
+                      key={game.id}
+                      type="button"
+                      onClick={() => setSelectedGame(game.id)}
+                      aria-label={`${game.name} 선택`}
+                      data-testid={`game-button-${game.id}`}
+                      title={game.name}
+                      className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-[1.9rem] border shadow-[0_18px_36px_rgba(0,0,0,0.42)] transition-all ${
                         isSelected
-                          ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-                      }`}
+                          ? 'border-amber-300/90 bg-zinc-800 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_18px_36px_rgba(0,0,0,0.42)]'
+                          : 'border-zinc-700/90 bg-zinc-800 hover:border-zinc-500'
+                      } ${hasImage ? 'h-[5.75rem] w-[10.5rem]' : 'h-[5.75rem] min-w-[148px] px-4'}`}
                     >
-                      {rarity}
+                      {hasImage ? (
+                        <div className="flex h-full w-full items-center justify-center p-2">
+                          <div className="h-full w-full overflow-hidden rounded-2xl bg-white">
+                            <img
+                              src={game.imageUrl ?? ''}
+                              alt={game.name}
+                              className="h-full w-full object-contain p-1.5"
+                              onError={(event) => {
+                                ;(event.target as HTMLImageElement).style.display = 'none'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center">
+                          <span className={`max-w-[112px] truncate text-base font-black ${isSelected ? 'text-white' : 'text-zinc-300'}`}>
+                            {game.name}
+                          </span>
+                        </div>
+                      )}
                     </button>
                   )
                 })}
               </div>
-            </div>
+            )}
           </div>
+        </div>
 
-          {hasGames && (
-            <div className="flex shrink-0 items-center gap-3 px-3 py-2">
-              {games.map((game) => {
-                const isSelected = game.id === selectedGame
-                const hasImage = Boolean(game.imageUrl)
-                return (
-                  <button
-                    key={game.id}
-                    type="button"
-                    onClick={() => setSelectedGame(game.id)}
-                    aria-label={`${game.name} 선택`}
-                    data-testid={`game-button-${game.id}`}
-                    title={game.name}
-                    className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-[1.9rem] border shadow-[0_18px_36px_rgba(0,0,0,0.42)] transition-all ${
-                      isSelected
-                        ? 'border-amber-300/90 bg-zinc-800 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_18px_36px_rgba(0,0,0,0.42)]'
-                        : 'border-zinc-700/90 bg-zinc-800 hover:border-zinc-500'
-                    } ${hasImage ? 'h-[5.75rem] w-[10.5rem]' : 'h-[5.75rem] min-w-[148px] px-4'}`}
+        <div className="flex min-h-[3rem] items-center gap-2 border-t border-zinc-800/60 px-3 py-1">
+          {searchOpen ? (
+            <div className="flex min-w-[220px] items-center gap-2 rounded-xl border border-amber-500/60 bg-zinc-900 px-3 py-2">
+              <Search className="h-4 w-4 shrink-0 text-amber-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchQueryChange(e.target.value)}
+                placeholder="카드 검색..."
+                aria-label="카드 검색 입력"
+                data-testid="search-input"
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchQueryChange('')}
+                  aria-label="검색어 지우기"
+                  className="text-zinc-500 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="relative shrink-0" ref={tabMenuRef}>
+              <button
+                type="button"
+                aria-label="하위 탭 선택"
+                data-testid="tab-dropdown-trigger"
+                onClick={() => setTabMenuOpen((open) => !open)}
+                className="flex min-w-[220px] items-center justify-between rounded-xl border border-amber-400/60 bg-zinc-900 px-4 py-2 text-sm font-bold text-white shadow-[0_8px_22px_rgba(0,0,0,0.28)] transition-colors hover:border-amber-300"
+              >
+                <span className="truncate">{activeTabLabel || '탭 선택'}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-amber-300 transition-transform ${tabMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {tabMenuOpen && selectableTabs.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    className="absolute left-0 top-[calc(100%+8px)] z-30 min-w-[220px] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
                   >
-                    {hasImage ? (
-                      <div className="flex h-full w-full items-center justify-center p-2">
-                        <div className="h-full w-full overflow-hidden rounded-2xl bg-white">
-                          <img
-                            src={game.imageUrl ?? ''}
-                            alt={game.name}
-                            className="h-full w-full object-contain p-1.5"
-                            onError={(event) => {
-                              ;(event.target as HTMLImageElement).style.display = 'none'
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center">
-                        <span className={`max-w-[112px] truncate text-base font-black ${isSelected ? 'text-white' : 'text-zinc-300'}`}>
-                          {game.name}
-                        </span>
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
+                    {selectableTabs.map((tab, index) => {
+                      const isActive = tab.value === selectedTab || (tab.value === allTabsValue && isAllTabsSelected)
+                      return (
+                        <motion.button
+                          key={tab.value}
+                          type="button"
+                          data-testid={`tab-option-${tab.value}`}
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.02, duration: 0.12 }}
+                          onClick={() => {
+                            setSelectedTab(tab.value)
+                            setTabMenuOpen(false)
+                          }}
+                          className={`block w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                            isActive ? 'bg-amber-500 text-black' : 'text-zinc-200 hover:bg-zinc-800'
+                          }`}
+                        >
+                          {tab.label}
+                        </motion.button>
+                      )
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
+
+          <div
+            className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+          >
+            <button
+              onClick={() => setSelectedRarity(null)}
+              aria-label="전체 레어도 보기"
+              data-testid="rarity-filter-all"
+              className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                selectedRarity === null
+                  ? 'bg-amber-500 text-black'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+              }`}
+            >
+              전체
+            </button>
+            {activeRarities.map((rarity) => {
+              const colors = getRarityColors(rarity)
+              const isSelected = selectedRarity === rarity
+              return (
+                <button
+                  key={rarity}
+                  onClick={() => setSelectedRarity(isSelected ? null : rarity)}
+                  aria-label={`${rarity} 레어도 필터`}
+                  data-testid={`rarity-filter-${rarity}`}
+                  className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 ${
+                    isSelected
+                      ? `${colors.bg} ${colors.text} ring-2 ring-white/20`
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  {rarity}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 

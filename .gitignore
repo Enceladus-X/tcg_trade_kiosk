@@ -39,3 +39,4 @@ pnpm-debug.log*
 npm-debug.log*
 .devserver.out.log
 .devserver.err.log
+.devserver.log

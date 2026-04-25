@@ -73,7 +73,7 @@ export default function POSPage() {
         />
       </main>
 
-      <div className="pointer-events-none fixed left-6 top-4 z-30">
+      <div className="pointer-events-none fixed left-2 top-2 z-30">
         <div className="flex items-center gap-2">
           <div
             className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold shadow-[0_10px_26px_rgba(0,0,0,0.35)] backdrop-blur-md ${
