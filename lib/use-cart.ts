@@ -97,6 +97,28 @@ function removeItem(cardId: string, rarity: string, paymentMethod: CartItem['pay
   emitChange()
 }
 
+function setAllPaymentMethods(nextPaymentMethod: CartItem['paymentMethod']) {
+  const nextItems: CartItem[] = []
+
+  for (const item of cartStore.items) {
+    const existingIndex = nextItems.findIndex(
+      i => i.cardId === item.cardId && i.rarity === item.rarity && i.paymentMethod === nextPaymentMethod
+    )
+
+    if (existingIndex >= 0) {
+      nextItems[existingIndex] = {
+        ...nextItems[existingIndex],
+        quantity: nextItems[existingIndex].quantity + item.quantity,
+      }
+    } else {
+      nextItems.push({ ...item, paymentMethod: nextPaymentMethod })
+    }
+  }
+
+  cartStore.items = nextItems
+  emitChange()
+}
+
 function clearCart() {
   cartStore.items = []
   emitChange()
@@ -116,6 +138,7 @@ export function useCart() {
     addItem: useCallback(addItem, []),
     updateQuantity: useCallback(updateQuantity, []),
     updatePaymentMethod: useCallback(updatePaymentMethod, []),
+    setAllPaymentMethods: useCallback(setAllPaymentMethods, []),
     removeItem: useCallback(removeItem, []),
     clearCart: useCallback(clearCart, []),
   }

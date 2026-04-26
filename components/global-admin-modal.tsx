@@ -1,7 +1,18 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
   Plus, Minus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
@@ -126,6 +137,19 @@ function getAppliedItemTotal(price: number, quantity: number, paymentMethod: Pay
   return subtotal
 }
 
+const GAME_CHART_COLORS = ['#f59e0b', '#22c55e', '#38bdf8', '#a78bfa', '#fb7185', '#facc15', '#14b8a6']
+
+function formatChartDate(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function getDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function PaymentMethodToggle({
   value,
   onChange,
@@ -217,7 +241,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [passwordSaved, setPasswordSaved] = useState(false)
 
   // 통계
-  const [statsRange, setStatsRange] = useState<'today' | 'all'>('today')
+  const [statsRange, setStatsRange] = useState<'today' | 'week' | 'all'>('today')
 
   // 카드 관리 — 일괄 편집
   const [bulkEditMode, setBulkEditMode] = useState(false)
@@ -229,6 +253,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [bulkImportError, setBulkImportError] = useState<string | null>(null)
   const [bulkImportSuccess, setBulkImportSuccess] = useState<string | null>(null)
   const bulkImportInputRef = useRef<HTMLInputElement>(null)
+  const statsCaptureRef = useRef<HTMLDivElement>(null)
 
   const copyCustomerInfo = useCallback((order: (typeof orders)[number]) => {
     const text = [order.customerName, order.bankName, order.accountNumber]
@@ -396,6 +421,21 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       return { ...prev, [orderId]: next }
     })
     setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote(''); setEditingPaymentMethod('cash')
+  }
+
+  const setOrderItemPaymentMethod = (orderId: string, itemId: string, paymentMethod: PaymentMethod) => {
+    setAdjustedPaymentMethods(prev => {
+      const next = { ...(prev[orderId] ?? {}) }
+      next[itemId] = paymentMethod
+      return { ...prev, [orderId]: next }
+    })
+  }
+
+  const setAllOrderPaymentMethods = (order: (typeof orders)[number], paymentMethod: PaymentMethod) => {
+    setAdjustedPaymentMethods(prev => ({
+      ...prev,
+      [order.id]: Object.fromEntries(order.items.map(item => [item.itemId!, paymentMethod])),
+    }))
   }
 
   // ---- 가격/메모 DB 저장 ----
@@ -780,8 +820,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   })
 
   // 통계
-  const todayStr = new Date().toDateString()
-  const statsOrders     = statsRange === 'today' ? orders.filter(o => new Date(o.createdAt).toDateString() === todayStr) : orders
+  const today = new Date()
+  const todayStr = today.toDateString()
+  const weekStart = new Date(today)
+  weekStart.setHours(0, 0, 0, 0)
+  weekStart.setDate(today.getDate() - 6)
+  const statsOrders = statsRange === 'today'
+    ? orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
+    : statsRange === 'week'
+    ? orders.filter(o => new Date(o.createdAt) >= weekStart)
+    : orders
   const statsTotal      = statsOrders.reduce((sum, o) => sum + o.totalPrice, 0)
   const statsPaidTotal  = statsOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
   const statsCashCount  = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'cash').length
@@ -797,9 +845,124 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       else topCardsMap.set(key, { cardName: item.cardName, rarity: item.rarity, count: item.quantity, totalPrice: item.price * item.quantity })
     }
   }
-  const topCards = [...topCardsMap.values()].sort((a, b) => b.count - a.count).slice(0, 10)
+  const allStatsCards = [...topCardsMap.values()].sort((a, b) => b.count - a.count)
+  const topCards = allStatsCards.slice(0, 10)
 
   // 일괄 편집 — 현재 탭 카드 + 레어도 컬럼
+  const statsAnalytics = useMemo(() => {
+    const cardById = new Map(cards.map(card => [card.id, card]))
+    const gameById = new Map(games.map(game => [game.id, game]))
+    const tabById = new Map(tabObjects.map(tab => [tab.id, tab]))
+    const tabByName = new Map(tabObjects.map(tab => [tab.name, tab]))
+    const gameTotals = new Map<string, { name: string; total: number; count: number; color: string }>()
+    const today = new Date()
+    const weeklyBuckets = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(today)
+      date.setDate(today.getDate() - (6 - index))
+      return { key: getDateKey(date), label: formatChartDate(date), total: 0, count: 0 }
+    })
+    const weeklyByKey = new Map(weeklyBuckets.map(bucket => [bucket.key, bucket]))
+
+    for (const order of statsOrders) {
+      if (order.status === 'rejected') continue
+      const weeklyBucket = weeklyByKey.get(getDateKey(new Date(order.createdAt)))
+
+      for (const item of order.items) {
+        const amount = getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, order.mileageRate ?? mileageRate)
+        const card = item.cardId ? cardById.get(item.cardId) : undefined
+        const tab = card?.tabId ? tabById.get(card.tabId) : tabByName.get(card?.category ?? '')
+        const gameId = card?.gameId ?? tab?.game_id ?? null
+        const name = gameId ? gameById.get(gameId)?.name ?? '미분류' : '미분류'
+        const previous = gameTotals.get(name)
+
+        if (previous) {
+          previous.total += amount
+          previous.count += item.quantity
+        } else {
+          gameTotals.set(name, {
+            name,
+            total: amount,
+            count: item.quantity,
+            color: GAME_CHART_COLORS[gameTotals.size % GAME_CHART_COLORS.length],
+          })
+        }
+
+        if (weeklyBucket) {
+          weeklyBucket.total += amount
+          weeklyBucket.count += item.quantity
+        }
+      }
+    }
+
+    return {
+      byGame: [...gameTotals.values()].sort((a, b) => b.total - a.total),
+      weekly: weeklyBuckets,
+      monthly: (() => {
+        const monthlyBuckets = Array.from({ length: 30 }, (_, index) => {
+          const date = new Date(today)
+          date.setDate(today.getDate() - (29 - index))
+          return { key: getDateKey(date), label: formatChartDate(date), total: 0, count: 0 }
+        })
+        const monthlyByKey = new Map(monthlyBuckets.map(bucket => [bucket.key, bucket]))
+
+        for (const order of orders) {
+          if (order.status === 'rejected') continue
+          const bucket = monthlyByKey.get(getDateKey(new Date(order.createdAt)))
+          if (!bucket) continue
+
+          for (const item of order.items) {
+            bucket.total += getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, order.mileageRate ?? mileageRate)
+            bucket.count += item.quantity
+          }
+        }
+
+        return monthlyBuckets
+      })(),
+      maxWeeklyTotal: Math.max(...weeklyBuckets.map(bucket => bucket.total), 1),
+    }
+  }, [cards, games, mileageRate, orders, statsOrders, tabObjects])
+
+  const statsRangeLabels: Record<typeof statsRange, string> = {
+    today: '오늘',
+    week: '일주일',
+    all: '전체',
+  }
+
+  const downloadStatsCsv = useCallback(() => {
+    const rows = [
+      ['section', 'name', 'count', 'total'],
+      ...statsAnalytics.byGame.map(item => ['game', item.name, String(item.count), String(item.total)]),
+      ...statsAnalytics.weekly.map(item => ['weekly', item.label, String(item.count), String(item.total)]),
+      ...statsAnalytics.monthly.map(item => ['monthly', item.label, String(item.count), String(item.total)]),
+      ...allStatsCards.map(item => ['card', `${item.cardName} ${item.rarity}`, String(item.count), String(item.totalPrice)]),
+    ]
+    const csv = rows
+      .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `marinford-stats-${statsRange}-${getDateKey(new Date())}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [allStatsCards, statsAnalytics.byGame, statsAnalytics.monthly, statsAnalytics.weekly, statsRange])
+
+  const downloadStatsImage = useCallback(async () => {
+    const target = statsCaptureRef.current
+    if (!target) return
+    const htmlToImage = await import('html-to-image')
+    const dataUrl = await htmlToImage.toPng(target, {
+      cacheBust: true,
+      backgroundColor: '#09090b',
+      pixelRatio: 2,
+    })
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = `marinford-stats-${statsRange}-${getDateKey(new Date())}.png`
+    link.click()
+  }, [statsRange])
+
   const effectiveBulkTab = bulkEditTab || tabs[0] || ''
   const bulkTabCards = cards.filter(c => c.category === effectiveBulkTab)
   const bulkRarities = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
@@ -1047,6 +1210,33 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           <div className="border-t border-zinc-700 p-4">
                             <div className="mb-4 space-y-2">
                               <p className="text-xs font-medium text-zinc-500">매입 품목</p>
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+                                <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setAllOrderPaymentMethods(order, 'cash')
+                                    }}
+                                    className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25"
+                                  >
+                                    <Banknote className="h-3.5 w-3.5" />
+                                    전체 현금
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setAllOrderPaymentMethods(order, 'mileage')
+                                    }}
+                                    className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                                  >
+                                    <Coins className="h-3.5 w-3.5" />
+                                    전체 마일리지
+                                  </button>
+                                </div>
+                              </div>
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
                                 const cardImg = item.cardId ? cards.find(c => c.id === item.cardId)?.imageUrl : undefined
@@ -1084,6 +1274,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           </span>
                                         )}
                                       </div>
+                                      {item.itemId && (
+                                        <div className="w-[156px] shrink-0">
+                                          <PaymentMethodToggle
+                                            value={displayPaymentMethod}
+                                            onChange={(nextValue) => setOrderItemPaymentMethod(order.id, item.itemId!, nextValue)}
+                                            compact
+                                          />
+                                        </div>
+                                      )}
                                       <span className={`shrink-0 text-xs ${isQuantityChanged ? 'text-sky-400' : 'text-zinc-500'}`}>x{displayQuantity}</span>
                                       <div className="flex shrink-0 items-center gap-1.5">
                                         {isPriceChanged && (
@@ -1697,69 +1896,116 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             </div>
           )}
 
-          {/* ── 통계 ── */}
+          {/* Stats */}
           {activeTab === 'stats' && (
             <div className="p-6">
-              <div className="mx-auto max-w-lg space-y-6">
-                <div className="flex rounded-xl border border-zinc-800 bg-zinc-800/50 p-1">
-                  {(['today', 'all'] as const).map((range) => (
-                    <button key={range} onClick={() => setStatsRange(range)}
-                      className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-                        statsRange === range ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                      }`}>
-                      {range === 'today' ? '오늘' : '전체'}
-                    </button>
-                  ))}
+              <div ref={statsCaptureRef} className="space-y-5 rounded-2xl bg-zinc-900 p-1">
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 p-1">
+                    {(['today', 'week', 'all'] as const).map((range) => (
+                      <button key={range} onClick={() => setStatsRange(range)}
+                        className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                          statsRange === range ? 'bg-amber-500 text-black' : 'text-zinc-500 hover:text-zinc-300'
+                        }`}>
+                        {statsRangeLabels[range]}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={downloadStatsImage} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 text-sm font-semibold text-zinc-200 transition-colors hover:border-amber-500 hover:text-white">
+                    <Download className="h-4 w-4" />
+                    {'\uC774\uBBF8\uC9C0 \uC800\uC7A5'}
+                  </button>
+                  <button onClick={downloadStatsCsv} className="flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 text-sm font-semibold text-zinc-200 transition-colors hover:border-sky-500 hover:text-white">
+                    <Table2 className="h-4 w-4" />
+                    {'\uD45C \uC800\uC7A5'}
+                  </button>
                 </div>
-                <div className="space-y-3">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
-                    <BarChart2 className="h-4 w-4 text-amber-400" />매입 현황
-                    <span className="text-xs font-normal text-zinc-600">{statsRange === 'today' ? '(오늘)' : '(전체)'}</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">요청 총액</p>
-                      <p className="mt-1 text-2xl font-bold text-white">{formatPrice(statsTotal)}</p>
-                      <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.length}건</p>
-                    </div>
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">지급 완료</p>
-                      <p className="mt-1 text-2xl font-bold text-emerald-400">{formatPrice(statsPaidTotal)}</p>
-                      <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.filter(o => o.status === 'paid').length}건</p>
-                    </div>
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">현금 매입</p>
-                      <p className="mt-1 text-2xl font-bold text-amber-400">{statsCashCount}건</p>
-                    </div>
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-800/50 p-4">
-                      <p className="text-xs text-zinc-500">마일리지 매입</p>
-                      <p className="mt-1 text-2xl font-bold text-emerald-400">{statsMileageCount}건</p>
-                    </div>
+
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <p className="text-xs text-zinc-500">{'\uC694\uCCAD \uCD1D\uC561'}</p>
+                    <p className="mt-1 text-2xl font-black text-white">{formatPrice(statsTotal)}</p>
+                    <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.length}{'\uAC74'}</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <p className="text-xs text-zinc-500">{'\uC9C0\uAE09 \uC644\uB8CC'}</p>
+                    <p className="mt-1 text-2xl font-black text-emerald-300">{formatPrice(statsPaidTotal)}</p>
+                    <p className="mt-0.5 text-xs text-zinc-600">{statsOrders.filter(o => o.status === 'paid').length}{'\uAC74'}</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <p className="text-xs text-zinc-500">{'\uD604\uAE08 / \uB9C8\uC77C\uB9AC\uC9C0'}</p>
+                    <p className="mt-1 text-2xl font-black text-amber-300">{statsCashCount}<span className="text-sm text-zinc-500"> / </span><span className="text-emerald-300">{statsMileageCount}</span></p>
+                    <p className="mt-0.5 text-xs text-zinc-600">{'\uD63C\uD569'} {statsMixedCount}{'\uAC74'}</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                    <p className="text-xs text-zinc-500">{'\uC9D1\uACC4 \uB9E4\uC218'}</p>
+                    <p className="mt-1 text-2xl font-black text-sky-300">{statsAnalytics.weekly.reduce((sum, day) => sum + day.count, 0)}{'\uC7A5'}</p>
+                    <p className="mt-0.5 text-xs text-zinc-600">{'\uAC70\uC808 \uC81C\uC678'}</p>
                   </div>
                 </div>
-                <div className="border-t border-zinc-800" />
-                <div className="space-y-3">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
-                    <TrendingUp className="h-4 w-4 text-violet-400" />인기 매입 카드 TOP 10
-                    <span className="text-xs font-normal text-zinc-600">(거절 제외)</span>
-                  </h3>
-                  {topCards.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-zinc-500">데이터 없음</p>
-                  ) : (
-                    <div className="space-y-2">
+
+                <div className={`grid gap-4 ${statsRange === 'today' ? 'grid-cols-1' : 'grid-cols-[1.08fr_0.92fr]'}`}>
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+                        <BarChart2 className="h-4 w-4 text-amber-300" />
+                        {'\uAC8C\uC784\uBCC4 \uB9E4\uC785 \uBE44\uC911'}
+                      </h3>
+                      <span className="text-xs text-zinc-500">{'\uC801\uC6A9 \uC9C0\uAE09\uC561 \uAE30\uC900'}</span>
+                    </div>
+                    {statsAnalytics.byGame.length === 0 ? (
+                      <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">{'\uC544\uC9C1 \uD45C\uC2DC\uD560 \uB9E4\uC785 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'}</div>
+                    ) : (
+                      <div className="grid grid-cols-[220px_1fr] items-center gap-5">
+                        <div className="h-56">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={statsAnalytics.byGame} dataKey="total" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3} stroke="#09090b" strokeWidth={3}>
+                                {statsAnalytics.byGame.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                              </Pie>
+                              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 12, color: '#fff' }} formatter={(value) => formatPrice(Number(value))} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-3">
+                          {statsAnalytics.byGame.slice(0, 7).map((game) => {
+                            const total = statsAnalytics.byGame.reduce((sum, item) => sum + item.total, 0) || 1
+                            const percent = Math.round((game.total / total) * 100)
+                            return (
+                              <div key={game.name} className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-3 text-sm">
+                                  <div className="flex min-w-0 items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: game.color }} /><span className="truncate font-semibold text-zinc-200">{game.name}</span></div>
+                                  <span className="shrink-0 font-bold text-white">{percent}%</span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-zinc-800"><motion.div className="h-full rounded-full" style={{ backgroundColor: game.color }} initial={{ width: 0 }} animate={{ width: percent + '%' }} transition={{ duration: 0.5, ease: 'easeOut' }} /></div>
+                                <div className="flex justify-between text-xs text-zinc-500"><span>{game.count}{'\uC7A5'}</span><span>{formatPrice(game.total)}</span></div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {statsRange !== 'today' && (
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                      <div className="mb-4 flex items-center justify-between"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><TrendingUp className="h-4 w-4 text-sky-300" />{statsRange === 'week' ? '\uCD5C\uADFC 7\uC77C \uCD94\uC774' : '\uCD5C\uADFC 30\uC77C \uCD94\uC774'}</h3><span className="text-xs text-zinc-500">{'\uB9E4\uC785\uC561 / \uB9E4\uC218'}</span></div>
+                      {(statsRange === 'week' ? statsAnalytics.weekly : statsAnalytics.monthly).every(day => day.total === 0) ? (
+                        <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">{statsRange === 'week' ? '\uCD5C\uADFC 7\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4' : '\uCD5C\uADFC 30\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'}</div>
+                      ) : (
+                        <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={statsRange === 'week' ? statsAnalytics.weekly : statsAnalytics.monthly} margin={{ top: 12, right: 8, left: -28, bottom: 0 }}><XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} interval={statsRange === 'week' ? 0 : 4} /><YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => Math.round(Number(value) / 10000) + '\uB9CC'} /><Tooltip cursor={{ fill: 'rgba(250,204,21,0.08)' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 12, color: '#fff' }} formatter={(value, name) => name === 'total' ? formatPrice(Number(value)) : String(value) + '\uC7A5'} labelFormatter={(label) => String(label)} /><Bar dataKey="total" radius={[8, 8, 3, 3]} fill="#f59e0b" /></BarChart></ResponsiveContainer></div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><TrendingUp className="h-4 w-4 text-violet-300" />{'\uC778\uAE30 \uB9E4\uC785 \uCE74\uB4DC TOP 10'}<span className="text-xs font-normal text-zinc-600">{'\uAC70\uC808 \uC81C\uC678'}</span></h3>
+                  {topCards.length === 0 ? <p className="py-6 text-center text-sm text-zinc-500">{'\uD45C\uC2DC\uD560 \uCE74\uB4DC \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'}</p> : (
+                    <div className="grid grid-cols-2 gap-2">
                       {topCards.map((item, rank) => {
                         const colors = getRarityColors(item.rarity)
-                        return (
-                          <div key={`${item.cardName}|${item.rarity}`} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-4 py-2.5">
-                            <span className={`w-6 shrink-0 text-center text-sm font-bold ${rank < 3 ? 'text-amber-400' : 'text-zinc-600'}`}>{rank + 1}</span>
-                            <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{item.cardName}</span>
-                            <div className="flex shrink-0 flex-col items-end">
-                              <span className="text-sm font-bold text-zinc-200">{item.count}장</span>
-                              <span className="text-xs text-zinc-500">{formatPrice(item.totalPrice)}</span>
-                            </div>
-                          </div>
-                        )
+                        return <div key={[item.cardName, item.rarity].join('|')} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 px-4 py-2.5"><span className={['w-6 shrink-0 text-center text-sm font-bold', rank < 3 ? 'text-amber-400' : 'text-zinc-600'].join(' ')}>{rank + 1}</span><span className={['shrink-0 rounded px-2 py-0.5 text-xs font-bold', colors.bg, colors.text].join(' ')}>{item.rarity}</span><span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{item.cardName}</span><div className="flex shrink-0 flex-col items-end"><span className="text-sm font-bold text-zinc-200">{item.count}{'\uC7A5'}</span><span className="text-xs text-zinc-500">{formatPrice(item.totalPrice)}</span></div></div>
                       })}
                     </div>
                   )}
@@ -1767,7 +2013,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
               </div>
             </div>
           )}
-
           {/* ── 설정 ── */}
           {activeTab === 'settings' && (
             <div className="p-6">

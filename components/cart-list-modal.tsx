@@ -50,7 +50,7 @@ function PaymentToggle({
 }
 
 export function CartListModal({ onClose }: CartListModalProps) {
-  const { items, updateQuantity, updatePaymentMethod, removeItem, clearCart } = useCart()
+  const { items, updateQuantity, updatePaymentMethod, setAllPaymentMethods, removeItem, clearCart } = useCart()
   const { createOrder } = useOrders()
   const { mileageRate } = useStoreSettings()
 
@@ -312,6 +312,27 @@ export function CartListModal({ onClose }: CartListModalProps) {
                   </div>
                 ) : (
                   <div className="divide-y divide-zinc-800 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
+                      <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAllPaymentMethods('cash')}
+                          className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25"
+                        >
+                          <Banknote className="h-3.5 w-3.5" />
+                          전체 현금
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAllPaymentMethods('mileage')}
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                        >
+                          <Coins className="h-3.5 w-3.5" />
+                          전체 마일리지
+                        </button>
+                      </div>
+                    </div>
                     {items.map((item) => {
                       const colors = getRarityColors(item.rarity)
                       const itemTotal = item.paymentMethod === 'mileage'
