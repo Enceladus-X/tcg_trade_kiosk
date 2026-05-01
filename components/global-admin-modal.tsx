@@ -241,7 +241,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [passwordSaved, setPasswordSaved] = useState(false)
 
   // 통계
-  const [statsRange, setStatsRange] = useState<'today' | 'week' | 'all'>('today')
+  const [statsRange, setStatsRange] = useState<'today' | 'week' | 'month' | 'all'>('today')
 
   // 카드 관리 — 일괄 편집
   const [bulkEditMode, setBulkEditMode] = useState(false)
@@ -825,16 +825,24 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const weekStart = new Date(today)
   weekStart.setHours(0, 0, 0, 0)
   weekStart.setDate(today.getDate() - 6)
+  const monthStart = new Date(today)
+  monthStart.setHours(0, 0, 0, 0)
+  monthStart.setDate(today.getDate() - 29)
   const statsOrders = statsRange === 'today'
     ? orders.filter(o => new Date(o.createdAt).toDateString() === todayStr)
     : statsRange === 'week'
     ? orders.filter(o => new Date(o.createdAt) >= weekStart)
+    : statsRange === 'month'
+    ? orders.filter(o => new Date(o.createdAt) >= monthStart)
     : orders
   const statsTotal      = statsOrders.reduce((sum, o) => sum + o.totalPrice, 0)
   const statsPaidTotal  = statsOrders.filter(o => o.status === 'paid').reduce((sum, o) => sum + o.totalPrice, 0)
   const statsCashCount  = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'cash').length
   const statsMileageCount = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'mileage').length
   const statsMixedCount = statsOrders.filter(o => deriveOrderPaymentMethod(o.items) === 'mixed').length
+  const statsItemCount = statsOrders
+    .filter(o => o.status !== 'rejected')
+    .reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0)
 
   const topCardsMap = new Map<string, { cardName: string; rarity: string; count: number; totalPrice: number }>()
   for (const order of statsOrders.filter(o => o.status !== 'rejected')) {
@@ -923,9 +931,10 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   }, [cards, games, mileageRate, orders, statsOrders, tabObjects])
 
   const statsRangeLabels: Record<typeof statsRange, string> = {
-    today: '오늘',
-    week: '일주일',
-    all: '전체',
+    today: '\uC624\uB298',
+    week: '7\uC77C',
+    month: '30\uC77C',
+    all: '\uC804\uCCB4',
   }
 
   const downloadStatsCsv = useCallback(() => {
@@ -1902,7 +1911,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
               <div ref={statsCaptureRef} className="space-y-5 rounded-2xl bg-zinc-900 p-1">
                 <div className="flex items-center gap-3">
                   <div className="flex flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 p-1">
-                    {(['today', 'week', 'all'] as const).map((range) => (
+                    {(['today', 'week', 'month', 'all'] as const).map((range) => (
                       <button key={range} onClick={() => setStatsRange(range)}
                         className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
                           statsRange === range ? 'bg-amber-500 text-black' : 'text-zinc-500 hover:text-zinc-300'
@@ -1939,7 +1948,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   </div>
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
                     <p className="text-xs text-zinc-500">{'\uC9D1\uACC4 \uB9E4\uC218'}</p>
-                    <p className="mt-1 text-2xl font-black text-sky-300">{statsAnalytics.weekly.reduce((sum, day) => sum + day.count, 0)}{'\uC7A5'}</p>
+                    <p className="mt-1 text-2xl font-black text-sky-300">{statsItemCount}{'\uC7A5'}</p>
                     <p className="mt-0.5 text-xs text-zinc-600">{'\uAC70\uC808 \uC81C\uC678'}</p>
                   </div>
                 </div>
