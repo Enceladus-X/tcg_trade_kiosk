@@ -150,6 +150,43 @@ function getDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+function getStartOfDay(date: Date) {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function getDayDiff(from: Date, to: Date) {
+  const dayMs = 24 * 60 * 60 * 1000
+  return Math.floor((getStartOfDay(to).getTime() - getStartOfDay(from).getTime()) / dayMs)
+}
+
+function getWeekStart(date: Date) {
+  const next = getStartOfDay(date)
+  const day = next.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  next.setDate(next.getDate() + mondayOffset)
+  return next
+}
+
+function getWeekKey(date: Date) {
+  return getDateKey(getWeekStart(date))
+}
+
+function formatWeekLabel(date: Date) {
+  return `${formatChartDate(getWeekStart(date))}\uC8FC`
+}
+
+function getMonthKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
+function formatMonthLabel(date: Date) {
+  return `${date.getFullYear().toString().slice(2)}.${date.getMonth() + 1}`
+}
+
 function PaymentMethodToggle({
   value,
   onChange,
@@ -864,6 +901,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     const tabByName = new Map(tabObjects.map(tab => [tab.name, tab]))
     const gameTotals = new Map<string, { name: string; total: number; count: number; color: string }>()
     const today = new Date()
+    const addAmountToBucket = (
+      bucket: { total: number; count: number } | undefined,
+      order: (typeof orders)[number]
+    ) => {
+      if (!bucket || order.status === 'rejected') return
+      for (const item of order.items) {
+        bucket.total += getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, order.mileageRate ?? mileageRate)
+        bucket.count += item.quantity
+      }
+    }
     const weeklyBuckets = Array.from({ length: 7 }, (_, index) => {
       const date = new Date(today)
       date.setDate(today.getDate() - (6 - index))
@@ -926,6 +973,77 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
         return monthlyBuckets
       })(),
+      allTrend: (() => {
+        const trendOrders = orders
+          .filter(order => order.status !== 'rejected')
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+        if (trendOrders.length === 0) {
+          return {
+            data: [] as { key: string; label: string; total: number; count: number }[],
+            title: '\uC804\uCCB4 \uAE30\uAC04 \uCD94\uC774',
+            emptyText: '\uC804\uCCB4 \uAE30\uAC04 \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+            note: '',
+            interval: 0,
+          }
+        }
+
+        const firstDate = getStartOfDay(new Date(trendOrders[0].createdAt))
+        const spanDays = getDayDiff(firstDate, today) + 1
+
+        if (spanDays <= 30) {
+          const buckets = Array.from({ length: spanDays }, (_, index) => {
+            const date = new Date(firstDate)
+            date.setDate(firstDate.getDate() + index)
+            return { key: getDateKey(date), label: formatChartDate(date), total: 0, count: 0 }
+          })
+          const byKey = new Map(buckets.map(bucket => [bucket.key, bucket]))
+          for (const order of trendOrders) addAmountToBucket(byKey.get(getDateKey(new Date(order.createdAt))), order)
+          return {
+            data: buckets,
+            title: '\uC804\uCCB4 \uAE30\uAC04 \uC77C\uBCC4 \uCD94\uC774',
+            emptyText: '\uC804\uCCB4 \uAE30\uAC04 \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+            note: '\uC804\uCCB4 \uB370\uC774\uD130\uAC00 30\uC77C \uC774\uD558\uB77C \uC77C\uBCC4\uB85C \uD45C\uC2DC\uD569\uB2C8\uB2E4',
+            interval: Math.max(Math.ceil(buckets.length / 7) - 1, 0),
+          }
+        }
+
+        if (spanDays <= 90) {
+          const buckets: { key: string; label: string; total: number; count: number }[] = []
+          const cursor = getWeekStart(firstDate)
+          const endKey = getWeekKey(today)
+          while (getWeekKey(cursor) <= endKey) {
+            buckets.push({ key: getWeekKey(cursor), label: formatWeekLabel(cursor), total: 0, count: 0 })
+            cursor.setDate(cursor.getDate() + 7)
+          }
+          const byKey = new Map(buckets.map(bucket => [bucket.key, bucket]))
+          for (const order of trendOrders) addAmountToBucket(byKey.get(getWeekKey(new Date(order.createdAt))), order)
+          return {
+            data: buckets,
+            title: '\uC804\uCCB4 \uAE30\uAC04 \uC8FC\uBCC4 \uCD94\uC774',
+            emptyText: '\uC804\uCCB4 \uAE30\uAC04 \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+            note: '\uC804\uCCB4 \uB370\uC774\uD130\uAC00 30\uC77C\uC744 \uB118\uC5B4 \uC8FC\uBCC4\uB85C \uBB36\uC5B4 \uD45C\uC2DC\uD569\uB2C8\uB2E4',
+            interval: Math.max(Math.ceil(buckets.length / 8) - 1, 0),
+          }
+        }
+
+        const monthBuckets: { key: string; label: string; total: number; count: number }[] = []
+        const cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1)
+        const endMonthKey = getMonthKey(today)
+        while (getMonthKey(cursor) <= endMonthKey) {
+          monthBuckets.push({ key: getMonthKey(cursor), label: formatMonthLabel(cursor), total: 0, count: 0 })
+          cursor.setMonth(cursor.getMonth() + 1)
+        }
+        const byMonthKey = new Map(monthBuckets.map(bucket => [bucket.key, bucket]))
+        for (const order of trendOrders) addAmountToBucket(byMonthKey.get(getMonthKey(new Date(order.createdAt))), order)
+        return {
+          data: monthBuckets,
+          title: '\uC804\uCCB4 \uAE30\uAC04 \uC6D4\uBCC4 \uCD94\uC774',
+          emptyText: '\uC804\uCCB4 \uAE30\uAC04 \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+          note: '\uC804\uCCB4 \uB370\uC774\uD130\uAC00 90\uC77C\uC744 \uB118\uC5B4 \uC6D4\uBCC4\uB85C \uBB36\uC5B4 \uD45C\uC2DC\uD569\uB2C8\uB2E4',
+          interval: Math.max(Math.ceil(monthBuckets.length / 8) - 1, 0),
+        }
+      })(),
       maxWeeklyTotal: Math.max(...weeklyBuckets.map(bucket => bucket.total), 1),
     }
   }, [cards, games, mileageRate, orders, statsOrders, tabObjects])
@@ -936,6 +1054,23 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     month: '30\uC77C',
     all: '\uC804\uCCB4',
   }
+  const trendChart = statsRange === 'week'
+    ? {
+        data: statsAnalytics.weekly,
+        title: '\uCD5C\uADFC 7\uC77C \uCD94\uC774',
+        emptyText: '\uCD5C\uADFC 7\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+        note: '',
+        interval: 0,
+      }
+    : statsRange === 'month'
+    ? {
+        data: statsAnalytics.monthly,
+        title: '\uCD5C\uADFC 30\uC77C \uCD94\uC774',
+        emptyText: '\uCD5C\uADFC 30\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4',
+        note: '',
+        interval: 4,
+      }
+    : statsAnalytics.allTrend
 
   const downloadStatsCsv = useCallback(() => {
     const rows = [
@@ -943,6 +1078,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       ...statsAnalytics.byGame.map(item => ['game', item.name, String(item.count), String(item.total)]),
       ...statsAnalytics.weekly.map(item => ['weekly', item.label, String(item.count), String(item.total)]),
       ...statsAnalytics.monthly.map(item => ['monthly', item.label, String(item.count), String(item.total)]),
+      ...statsAnalytics.allTrend.data.map(item => ['all-trend', item.label, String(item.count), String(item.total)]),
       ...allStatsCards.map(item => ['card', `${item.cardName} ${item.rarity}`, String(item.count), String(item.totalPrice)]),
     ]
     const csv = rows
@@ -955,7 +1091,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     link.download = `marinford-stats-${statsRange}-${getDateKey(new Date())}.csv`
     link.click()
     URL.revokeObjectURL(url)
-  }, [allStatsCards, statsAnalytics.byGame, statsAnalytics.monthly, statsAnalytics.weekly, statsRange])
+  }, [allStatsCards, statsAnalytics.allTrend.data, statsAnalytics.byGame, statsAnalytics.monthly, statsAnalytics.weekly, statsRange])
 
   const downloadStatsImage = useCallback(async () => {
     const target = statsCaptureRef.current
@@ -1998,11 +2134,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
                   {statsRange !== 'today' && (
                     <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-                      <div className="mb-4 flex items-center justify-between"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><TrendingUp className="h-4 w-4 text-sky-300" />{statsRange === 'week' ? '\uCD5C\uADFC 7\uC77C \uCD94\uC774' : '\uCD5C\uADFC 30\uC77C \uCD94\uC774'}</h3><span className="text-xs text-zinc-500">{'\uB9E4\uC785\uC561 / \uB9E4\uC218'}</span></div>
-                      {(statsRange === 'week' ? statsAnalytics.weekly : statsAnalytics.monthly).every(day => day.total === 0) ? (
-                        <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">{statsRange === 'week' ? '\uCD5C\uADFC 7\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4' : '\uCD5C\uADFC 30\uC77C \uAC70\uB798 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'}</div>
+                      <div className="mb-4 flex items-center justify-between"><h3 className="flex items-center gap-2 text-sm font-bold text-white"><TrendingUp className="h-4 w-4 text-sky-300" />{trendChart.title}</h3><span className="text-xs text-zinc-500">{'\uB9E4\uC785\uC561 / \uB9E4\uC218'}</span></div>
+                      {trendChart.note && <p className="mb-3 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">{trendChart.note}</p>}
+                      {trendChart.data.length === 0 || trendChart.data.every(day => day.total === 0) ? (
+                        <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">{trendChart.emptyText}</div>
                       ) : (
-                        <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={statsRange === 'week' ? statsAnalytics.weekly : statsAnalytics.monthly} margin={{ top: 12, right: 8, left: -28, bottom: 0 }}><XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} interval={statsRange === 'week' ? 0 : 4} /><YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => Math.round(Number(value) / 10000) + '\uB9CC'} /><Tooltip cursor={{ fill: 'rgba(250,204,21,0.08)' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 12, color: '#fff' }} formatter={(value, name) => name === 'total' ? formatPrice(Number(value)) : String(value) + '\uC7A5'} labelFormatter={(label) => String(label)} /><Bar dataKey="total" radius={[8, 8, 3, 3]} fill="#f59e0b" /></BarChart></ResponsiveContainer></div>
+                        <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={trendChart.data} margin={{ top: 12, right: 8, left: 2, bottom: 0 }}><XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} interval={trendChart.interval} /><YAxis width={44} tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => Math.round(Number(value) / 10000) + '\uB9CC'} /><Tooltip cursor={{ fill: 'rgba(250,204,21,0.08)' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 12, color: '#fff' }} formatter={(value, name) => name === 'total' ? formatPrice(Number(value)) : String(value) + '\uC7A5'} labelFormatter={(label) => String(label)} /><Bar dataKey="total" radius={[8, 8, 3, 3]} fill="#f59e0b" /></BarChart></ResponsiveContainer></div>
                       )}
                     </div>
                   )}
