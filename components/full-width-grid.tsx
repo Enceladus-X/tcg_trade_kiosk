@@ -192,8 +192,8 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
       return () => window.cancelIdleCallback(idleId)
     }
 
-    const timeoutId = window.setTimeout(preload, 180)
-    return () => window.clearTimeout(timeoutId)
+    const timeoutId = globalThis.setTimeout(preload, 180)
+    return () => globalThis.clearTimeout(timeoutId)
   }, [filteredCards])
 
   return (
@@ -458,6 +458,8 @@ const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   N: { bg: 'rgba(82,82,91,0.95)', color: '#e4e4e7' },
   R: { bg: 'rgba(37,99,235,0.95)', color: '#fff' },
   P: { bg: 'linear-gradient(132deg, rgba(202,240,255,0.96) 0%, rgba(214,225,255,0.96) 18%, rgba(245,214,255,0.94) 36%, rgba(255,236,214,0.92) 54%, rgba(220,255,244,0.92) 74%, rgba(213,228,255,0.96) 100%)', color: '#ffffff' },
+  OFPSE: { bg: 'linear-gradient(132deg, rgba(202,240,255,0.96) 0%, rgba(214,225,255,0.96) 18%, rgba(245,214,255,0.94) 36%, rgba(255,236,214,0.92) 54%, rgba(220,255,244,0.92) 74%, rgba(213,228,255,0.96) 100%)', color: '#31265d' },
+  GRM: { bg: 'linear-gradient(135deg, #09090b 0%, #1c1204 32%, #b7791f 58%, #f6d365 72%, #111111 100%)', color: '#fff1b8' },
   SR: { bg: 'rgba(217,119,6,0.95)', color: '#000' },
   UR: { bg: 'rgba(225,29,72,0.95)', color: '#fff' },
   UL: { bg: 'rgba(147,51,234,0.95)', color: '#fff' },
@@ -478,6 +480,8 @@ const RARITY_PRICE_COLOR: Record<string, string> = {
   N: '#a1a1aa',
   R: '#93c5fd',
   P: '#fff4ff',
+  OFPSE: '#fff4ff',
+  GRM: '#facc15',
   SR: '#fcd34d',
   UR: '#fda4af',
   UL: '#d8b4fe',
@@ -497,7 +501,11 @@ function strHashGrid(value: string): number {
 
 function isPrismRarityGrid(rarity: string) {
   const normalized = rarity.trim().toLowerCase()
-  return normalized === 'p' || rarity.includes('★')
+  return normalized === 'p' || (normalized !== 'ofur' && normalized.startsWith('of')) || rarity.includes('★')
+}
+
+function isGoldBlackRarityGrid(rarity: string) {
+  return rarity.trim().toLowerCase() === 'grm'
 }
 
 function getBadge(rarity: string) {
@@ -505,6 +513,12 @@ function getBadge(rarity: string) {
     return {
       bg: 'linear-gradient(132deg, rgba(202,240,255,0.96) 0%, rgba(214,225,255,0.96) 18%, rgba(245,214,255,0.94) 36%, rgba(255,236,214,0.92) 54%, rgba(220,255,244,0.92) 74%, rgba(213,228,255,0.96) 100%)',
       color: '#31265d',
+    }
+  }
+  if (isGoldBlackRarityGrid(rarity)) {
+    return {
+      bg: 'linear-gradient(135deg, #09090b 0%, #1c1204 32%, #b7791f 58%, #f6d365 72%, #111111 100%)',
+      color: '#fff1b8',
     }
   }
   return RARITY_BADGE[rarity] ?? EXTRA_BADGE[strHashGrid(rarity) % EXTRA_BADGE.length]
@@ -515,6 +529,12 @@ function getBadgeTextStyle(rarity: string) {
     return {
       WebkitTextStroke: '0.45px rgba(255,255,255,0.72)',
       textShadow: '0 1px 0 rgba(255,255,255,0.82), 0 1px 4px rgba(255,255,255,0.15)',
+    } as const
+  }
+  if (isGoldBlackRarityGrid(rarity)) {
+    return {
+      WebkitTextStroke: '0.45px rgba(0,0,0,0.92)',
+      textShadow: '0 1px 0 rgba(0,0,0,0.9), 0 0 8px rgba(245,158,11,0.45)',
     } as const
   }
 
@@ -531,6 +551,13 @@ function getPriceStyle(rarity: string) {
       color: '#d9c2ff',
       WebkitTextStroke: '0.85px rgba(37,28,74,0.96)',
       textShadow: '0 1px 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.62), 0 0 10px rgba(130,235,255,0.16)',
+    } as const
+  }
+  if (isGoldBlackRarityGrid(rarity)) {
+    return {
+      color: '#facc15',
+      WebkitTextStroke: '0.75px rgba(0,0,0,0.95)',
+      textShadow: '0 1px 0 rgba(255,241,184,0.28), 0 2px 10px rgba(0,0,0,0.72), 0 0 12px rgba(245,158,11,0.3)',
     } as const
   }
 

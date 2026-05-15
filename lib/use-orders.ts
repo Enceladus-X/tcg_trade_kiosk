@@ -345,6 +345,102 @@ export function useOrders() {
     onSuccess: invalidate,
   })
 
+  const splitOrderItemsMutation = useMutation({
+    mutationFn: async ({
+      orderId,
+      splits,
+      newTotal,
+      orderPaymentMethod,
+      mileageRate,
+    }: {
+      orderId: string
+      splits: {
+        sourceItem: CartItem
+        splitQuantity: number
+        price: number
+        note?: string | null
+        paymentMethod: PaymentMethod
+      }[]
+      newTotal: number
+      orderPaymentMethod: OrderPaymentMethod
+      mileageRate: number | null
+    }) => {
+      const localNotesByItemId = readLocalOrderItemNotes()
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+      const insertedItems: { sourceItemId: string; insertedItemId: string }[] = []
+
+      for (const split of splits) {
+        if (!split.sourceItem.itemId) continue
+
+        const splitQuantity = Math.max(1, Math.min(split.splitQuantity, split.sourceItem.quantity - 1))
+        const remainingQuantity = split.sourceItem.quantity - splitQuantity
+        if (remainingQuantity < 1) continue
+
+        const { error: updateError } = await supabase
+          .from('order_items')
+          .update({ quantity: remainingQuantity })
+          .eq('id', split.sourceItem.itemId)
+        if (updateError) throw updateError
+
+        const payload = {
+          order_id: orderId,
+          card_id: split.sourceItem.cardId || null,
+          card_name: split.sourceItem.cardName,
+          card_code: split.sourceItem.cardCode,
+          rarity: split.sourceItem.rarity,
+          price: split.price,
+          quantity: splitQuantity,
+          payment_method: split.paymentMethod,
+          note: split.note ?? null,
+        }
+
+        let { data: insertedItem, error: insertError } = await supabase
+          .from('order_items')
+          .insert(payload)
+          .select('id')
+          .single()
+
+        if (insertError && (isMissingNoteColumnError(insertError) || isMissingPaymentMethodColumnError(insertError))) {
+          const fallbackPayload: Omit<typeof payload, 'payment_method' | 'note'> & { note?: string | null } = {
+            order_id: payload.order_id,
+            card_id: payload.card_id,
+            card_name: payload.card_name,
+            card_code: payload.card_code,
+            rarity: payload.rarity,
+            price: payload.price,
+            quantity: payload.quantity,
+          }
+          if (!isMissingNoteColumnError(insertError)) fallbackPayload.note = payload.note
+          ;({ data: insertedItem, error: insertError } = await supabase
+            .from('order_items')
+            .insert(fallbackPayload)
+            .select('id')
+            .single())
+        }
+        if (insertError) throw insertError
+
+        const insertedItemId = insertedItem?.id
+        if (insertedItemId) {
+          insertedItems.push({ sourceItemId: split.sourceItem.itemId, insertedItemId })
+          if (split.note) localNotesByItemId[insertedItemId] = split.note
+          localPaymentMethodsByItemId[insertedItemId] = split.paymentMethod
+        }
+      }
+
+      const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_price: newTotal, payment_method: persistedOrderPaymentMethod, mileage_rate: mileageRate })
+        .eq('id', orderId)
+      if (orderError) throw orderError
+
+      writeLocalOrderItemNotes(localNotesByItemId)
+      writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
+      return insertedItems
+    },
+    onSuccess: invalidate,
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async (orderId: string) => {
       // order_items는 ON DELETE CASCADE로 자동 삭제
@@ -417,6 +513,77 @@ export function useOrders() {
     onSuccess: invalidateAdjustments,
   })
 
+  const cancelPriceAdjustmentsMutation = useMutation({
+    mutationFn: async ({
+      orderId,
+      itemUpdates,
+      itemDeletes,
+      newTotal,
+      orderPaymentMethod,
+      mileageRate,
+    }: {
+      orderId: string
+      itemUpdates: { itemId: string; price: number; quantity: number; note?: string | null; paymentMethod: PaymentMethod }[]
+      itemDeletes: string[]
+      newTotal: number
+      orderPaymentMethod: OrderPaymentMethod
+      mileageRate: number | null
+    }) => {
+      const localNotesByItemId = readLocalOrderItemNotes()
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+
+      for (const update of itemUpdates) {
+        const patch: { price: number; quantity: number; note?: string | null; payment_method?: PaymentMethod } = {
+          price: update.price,
+          quantity: update.quantity,
+          note: update.note ?? null,
+          payment_method: update.paymentMethod,
+        }
+
+        let { error } = await supabase.from('order_items').update(patch).eq('id', update.itemId)
+        if (error && (isMissingNoteColumnError(error) || isMissingPaymentMethodColumnError(error))) {
+          const fallbackPatch: { price: number; quantity: number; note?: string | null } = {
+            price: update.price,
+            quantity: update.quantity,
+          }
+          if (!isMissingNoteColumnError(error)) fallbackPatch.note = patch.note
+          ;({ error } = await supabase.from('order_items').update(fallbackPatch).eq('id', update.itemId))
+        }
+        if (error) throw error
+
+        delete localNotesByItemId[update.itemId]
+        localPaymentMethodsByItemId[update.itemId] = update.paymentMethod
+      }
+
+      for (const itemId of itemDeletes) {
+        const { error } = await supabase.from('order_items').delete().eq('id', itemId)
+        if (error) throw error
+        delete localNotesByItemId[itemId]
+        delete localPaymentMethodsByItemId[itemId]
+      }
+
+      const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_price: newTotal, payment_method: persistedOrderPaymentMethod, mileage_rate: mileageRate })
+        .eq('id', orderId)
+      if (orderError) throw orderError
+
+      const { error: adjustmentError } = await supabase
+        .from('order_item_adjustments')
+        .delete()
+        .eq('order_id', orderId)
+      if (adjustmentError && !isMissingAdjustmentsTableError(adjustmentError)) throw adjustmentError
+
+      writeLocalOrderItemNotes(localNotesByItemId)
+      writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
+    },
+    onSuccess: () => {
+      invalidate()
+      invalidateAdjustments()
+    },
+  })
+
   const pendingOrders  = orders.filter(o => o.status === 'pending')
   const approvedOrders = orders.filter(o => o.status === 'approved')
   const paidOrders     = orders.filter(o => o.status === 'paid')
@@ -449,10 +616,39 @@ export function useOrders() {
         updateItemPricesMutation.mutateAsync({ orderId, itemUpdates, newTotal, orderPaymentMethod, mileageRate }),
       [updateItemPricesMutation]
     ),
+    splitOrderItems: useCallback(
+      (
+        orderId: string,
+        splits: {
+          sourceItem: CartItem
+          splitQuantity: number
+          price: number
+          note?: string | null
+          paymentMethod: PaymentMethod
+        }[],
+        newTotal: number,
+        orderPaymentMethod: OrderPaymentMethod,
+        mileageRate: number | null
+      ) =>
+        splitOrderItemsMutation.mutateAsync({ orderId, splits, newTotal, orderPaymentMethod, mileageRate }),
+      [splitOrderItemsMutation]
+    ),
     createPriceAdjustments: useCallback(
       (entries: Omit<OrderItemAdjustment, 'id' | 'changedAt'>[]) =>
         createAdjustmentsMutation.mutateAsync(entries),
       [createAdjustmentsMutation]
+    ),
+    cancelPriceAdjustments: useCallback(
+      (
+        orderId: string,
+        itemUpdates: { itemId: string; price: number; quantity: number; note?: string | null; paymentMethod: PaymentMethod }[],
+        itemDeletes: string[],
+        newTotal: number,
+        orderPaymentMethod: OrderPaymentMethod,
+        mileageRate: number | null
+      ) =>
+        cancelPriceAdjustmentsMutation.mutateAsync({ orderId, itemUpdates, itemDeletes, newTotal, orderPaymentMethod, mileageRate }),
+      [cancelPriceAdjustmentsMutation]
     ),
     deleteOrder: useCallback(
       (orderId: string) => deleteMutation.mutate(orderId),

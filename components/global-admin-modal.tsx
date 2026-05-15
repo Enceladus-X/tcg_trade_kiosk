@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bar,
@@ -14,7 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard, User,
+  X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard,
   Plus, Minus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
   MessageSquare, Table2, Download, Upload, Printer, FileText, Banknote,
@@ -226,6 +226,66 @@ function PaymentMethodToggle({
   )
 }
 
+function OrderGameBadges({ games }: { games: { name: string; imageUrl: string | null; count: number }[] }) {
+  const visibleGames = games.slice(0, 2)
+  const isSplit = visibleGames.length === 2
+
+  return (
+    <div className="grid h-12 w-[104px] shrink-0 overflow-hidden rounded-2xl border border-zinc-700/80 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_18px_rgba(0,0,0,0.24)]">
+      {visibleGames.length === 0 ? (
+        <div className="flex h-full w-full items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 px-2 text-center text-[11px] font-black text-zinc-500">
+          미분류
+        </div>
+      ) : (
+        <div className={`grid h-full w-full ${isSplit ? 'grid-cols-2 gap-0' : 'grid-cols-1'}`}>
+          {visibleGames.map((game, index) => {
+            const normalizedGameName = game.name.replace(/\s/g, '').toLowerCase()
+            const isYuGiOh = normalizedGameName.includes('유희왕') || normalizedGameName.includes('yugioh')
+            const isOnePiece = normalizedGameName.includes('원피스') || normalizedGameName.includes('onepiece')
+            const splitLogoLeft = index === 0 ? 0 : isOnePiece ? -8 : -28
+
+            return (
+              <div
+                key={game.name}
+                className={`relative flex min-w-0 items-center overflow-hidden border border-white/10 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ${
+                  isSplit
+                    ? index === 0
+                      ? 'rounded-l-xl rounded-r-none border-r-0'
+                      : 'rounded-l-none rounded-r-xl'
+                    : 'rounded-xl'
+                }`}
+                title={`${game.name} ${game.count}장`}
+              >
+                {game.imageUrl ? (
+                  <div className="absolute inset-0 bg-gradient-to-br from-white via-zinc-50 to-zinc-200" aria-hidden="true" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 px-1 text-center text-[10px] font-black leading-tight text-black">
+                    {game.name}
+                  </span>
+                )}
+                {game.imageUrl && (
+                  <img
+                    src={game.imageUrl}
+                    alt={game.name}
+                    className="absolute top-1/2 object-contain object-center drop-shadow-[0_1px_0_rgba(255,255,255,0.7)]"
+                    style={{
+                      height: isYuGiOh ? '76%' : '88%',
+                      width: isSplit ? 96 : '86%',
+                      left: isSplit ? splitLogoLeft : '7%',
+                      transform: `translateY(${isYuGiOh ? '-56%' : '-50%'})`,
+                    }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 type AdminTab = 'orders' | 'add-card' | 'cards' | 'game-tabs' | 'stats' | 'settings'
 
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
@@ -234,7 +294,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     priceAdjustmentsByOrderId,
     updateOrderStatus,
     updateItemPrices,
+    splitOrderItems,
     createPriceAdjustments,
+    cancelPriceAdjustments,
     deleteOrder,
     deleteOrderItem,
   } = useOrders()
@@ -243,11 +305,43 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
   const { mileageRate, mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
   const availableRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
+  const cardById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards])
+  const cardImageById = useMemo(() => new Map(cards.map(card => [card.id, card.imageUrl])), [cards])
+  const gameById = useMemo(() => new Map(games.map(game => [game.id, game])), [games])
+  const tabByIdForOrder = useMemo(() => new Map(tabObjects.map(tab => [tab.id, tab])), [tabObjects])
+  const tabByNameForOrder = useMemo(() => new Map(tabObjects.map(tab => [tab.name, tab])), [tabObjects])
+  const getOrderGameBadges = useCallback((order: (typeof orders)[number]) => {
+    const counts = new Map<string, { name: string; imageUrl: string | null; count: number }>()
+
+    for (const item of order.items) {
+      const card = item.cardId ? cardById.get(item.cardId) : undefined
+      const tab = card?.tabId ? tabByIdForOrder.get(card.tabId) : tabByNameForOrder.get(card?.category ?? '')
+      const gameId = card?.gameId ?? tab?.game_id ?? null
+      const game = gameId ? gameById.get(gameId) : undefined
+      const key = game?.id ?? gameId ?? 'unclassified'
+      const previous = counts.get(key)
+
+      if (previous) {
+        previous.count += item.quantity
+      } else {
+        counts.set(key, {
+          name: game?.name ?? '미분류',
+          imageUrl: game?.imageUrl ?? null,
+          count: item.quantity,
+        })
+      }
+    }
+
+    return [...counts.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ko'))
+      .slice(0, 2)
+  }, [cardById, gameById, tabByIdForOrder, tabByNameForOrder])
 
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
   const [orderSearch, setOrderSearch] = useState('')
+  const deferredOrderSearch = useDeferredValue(orderSearch)
 
   // 매입 요청 필터
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all')
@@ -257,16 +351,30 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [adjustedNotes,  setAdjustedNotes]  = useState<Record<string, Record<string, string | null | undefined>>>({})
   const [adjustedQuantities, setAdjustedQuantities] = useState<Record<string, Record<string, string>>>({})
   const [savingOrderId,  setSavingOrderId]  = useState<string | null>(null)
+  const [cancelingAdjustmentOrderId, setCancelingAdjustmentOrderId] = useState<string | null>(null)
   const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
   const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
   const [saveErrorByOrderId, setSaveErrorByOrderId] = useState<Record<string, string>>({})
-  const [editingItem, setEditingItem] = useState<{ orderId: string; itemId: string } | null>(null)
+  const [editingItem, setEditingItem] = useState<{ orderId: string; itemId: string; variant: 'base' | 'split' } | null>(null)
   const [editingValue, setEditingValue] = useState('')
   const [editingQuantity, setEditingQuantity] = useState('1')
   const [editingPct,   setEditingPct]   = useState('')
   const [editingNote,  setEditingNote]  = useState('')
+  const editingPriceDraftRef = useRef('')
+  const editingPctDraftRef = useRef('')
+  const editingQuantityDraftRef = useRef('1')
+  const editingNoteDraftRef = useRef('')
+  const editingPriceInputRef = useRef<HTMLInputElement>(null)
+  const editingPctInputRef = useRef<HTMLInputElement>(null)
+  const editingQuantityInputRef = useRef<HTMLInputElement>(null)
   const [adjustedPaymentMethods, setAdjustedPaymentMethods] = useState<Record<string, Record<string, PaymentMethod>>>({})
   const [editingPaymentMethod, setEditingPaymentMethod] = useState<PaymentMethod>('cash')
+  const [pendingItemSplits, setPendingItemSplits] = useState<Record<string, Record<string, {
+    quantity: number
+    price: number
+    note: string | null
+    paymentMethod: PaymentMethod
+  }>>>({})
 
   // 설정 탭
   const [editMileagePercent, setEditMileagePercent] = useState<string>('')
@@ -386,35 +494,47 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     originalPrice: number,
     originalQuantity: number,
     currentNote: string | null | undefined,
-    currentPaymentMethod: PaymentMethod
+    currentPaymentMethod: PaymentMethod,
+    variant: 'base' | 'split' = 'base'
   ) => {
-    setEditingItem({ orderId, itemId })
+    setEditingItem({ orderId, itemId, variant })
+    const pendingSplit = pendingItemSplits[orderId]?.[itemId]
     const saved = adjustedPrices[orderId]?.[itemId]
-    const price = saved ? parseFloat(saved) : originalPrice
-    const savedQuantity = adjustedQuantities[orderId]?.[itemId]
+    const price = variant === 'split' && pendingSplit ? pendingSplit.price : saved ? parseFloat(saved) : originalPrice
+    const note = variant === 'split' && pendingSplit ? pendingSplit.note ?? '' : adjustedNotes[orderId]?.[itemId] ?? currentNote ?? ''
+    const quantity = String(variant === 'split' && pendingSplit ? pendingSplit.quantity : 1)
     setEditingValue(String(price))
-    setEditingQuantity(savedQuantity ?? String(originalQuantity))
+    setEditingQuantity(quantity)
     setEditingPct('')
-    setEditingNote(adjustedNotes[orderId]?.[itemId] ?? currentNote ?? '')
-    setEditingPaymentMethod(adjustedPaymentMethods[orderId]?.[itemId] ?? currentPaymentMethod)
+    setEditingNote(note)
+    editingPriceDraftRef.current = String(price)
+    editingPctDraftRef.current = ''
+    editingQuantityDraftRef.current = quantity
+    editingNoteDraftRef.current = note
+    setEditingPaymentMethod(variant === 'split' && pendingSplit ? pendingSplit.paymentMethod : adjustedPaymentMethods[orderId]?.[itemId] ?? currentPaymentMethod)
   }
 
   const handleDirectChange = (val: string, originalPrice: number) => {
-    setEditingValue(val)
+    editingPriceDraftRef.current = val
     const parsed = parseFloat(val)
     if (!isNaN(parsed) && originalPrice > 0) {
       const pct = Math.round((1 - parsed / originalPrice) * 100)
-      setEditingPct(pct > 0 ? String(pct) : '')
+      const nextPct = pct > 0 ? String(pct) : ''
+      editingPctDraftRef.current = nextPct
+      if (editingPctInputRef.current) editingPctInputRef.current.value = nextPct
     } else {
-      setEditingPct('')
+      editingPctDraftRef.current = ''
+      if (editingPctInputRef.current) editingPctInputRef.current.value = ''
     }
   }
 
   const handlePctChange = (val: string, originalPrice: number) => {
-    setEditingPct(val)
+    editingPctDraftRef.current = val
     const pct = parseFloat(val)
     if (!isNaN(pct) && pct >= 0 && pct < 100) {
-      setEditingValue(String(Math.round(originalPrice * (1 - pct / 100))))
+      const nextPrice = String(Math.round(originalPrice * (1 - pct / 100)))
+      editingPriceDraftRef.current = nextPrice
+      if (editingPriceInputRef.current) editingPriceInputRef.current.value = nextPrice
     }
   }
 
@@ -430,34 +550,78 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     return Number.isNaN(parsed) || parsed < 1 ? fallback : parsed
   }
 
-  const confirmEditItem = (orderId: string, itemId: string) => {
-    const price = parseFloat(editingValue)
+  const confirmEditItem = (order: (typeof orders)[number], itemId: string) => {
+    const originalItem = order.items.find((item) => item.itemId === itemId)
+    if (!originalItem) return
+    const price = parseFloat(editingPriceDraftRef.current || editingValue)
+    const selectedQuantity = Math.max(1, Math.min(parseInt(editingQuantityDraftRef.current || editingQuantity, 10) || 1, originalItem.quantity))
+    const nextNote = editingNoteDraftRef.current.trim() === '' ? null : editingNoteDraftRef.current.trim()
+    const priceChanged = !Number.isNaN(price) && price >= 0 && price !== originalItem.price
+    const noteChanged = nextNote !== (originalItem.note ?? null)
+    const paymentMethodChanged = editingPaymentMethod !== originalItem.paymentMethod
+    const isSplitEdit = editingItem?.orderId === order.id && editingItem?.itemId === itemId && editingItem.variant === 'split'
+    const shouldSplit = originalItem.quantity > 1 && selectedQuantity < originalItem.quantity && (isSplitEdit || priceChanged || noteChanged || paymentMethodChanged)
+
+    if (shouldSplit) {
+      setPendingItemSplits(prev => {
+        const next = { ...(prev[order.id] ?? {}) }
+        next[itemId] = {
+          quantity: selectedQuantity,
+          price: Number.isNaN(price) || price < 0 ? originalItem.price : price,
+          note: nextNote,
+          paymentMethod: editingPaymentMethod,
+        }
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedPrices(prev => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[itemId]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedQuantities(prev => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[itemId]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedNotes(prev => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[itemId]
+        return { ...prev, [order.id]: next }
+      })
+      setAdjustedPaymentMethods(prev => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[itemId]
+        return { ...prev, [order.id]: next }
+      })
+      setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote(''); editingPriceDraftRef.current = ''; editingPctDraftRef.current = ''; editingQuantityDraftRef.current = '1'; editingNoteDraftRef.current = ''; setEditingPaymentMethod('cash')
+      return
+    }
+
+    setPendingItemSplits(prev => {
+      if (!prev[order.id]?.[itemId]) return prev
+      const nextForOrder = { ...(prev[order.id] ?? {}) }
+      delete nextForOrder[itemId]
+      return { ...prev, [order.id]: nextForOrder }
+    })
+
     if (!isNaN(price) && price >= 0) {
       setAdjustedPrices(prev => {
-        const next = { ...(prev[orderId] ?? {}) }
+        const next = { ...(prev[order.id] ?? {}) }
         next[itemId] = String(price)
-        return { ...prev, [orderId]: next }
-      })
-    }
-    const quantity = parseInt(editingQuantity, 10)
-    if (!Number.isNaN(quantity) && quantity >= 1) {
-      setAdjustedQuantities(prev => {
-        const next = { ...(prev[orderId] ?? {}) }
-        next[itemId] = String(quantity)
-        return { ...prev, [orderId]: next }
+        return { ...prev, [order.id]: next }
       })
     }
     setAdjustedNotes(prev => {
-      const next = { ...(prev[orderId] ?? {}) }
-      next[itemId] = editingNote.trim() === '' ? null : editingNote.trim()
-      return { ...prev, [orderId]: next }
+      const next = { ...(prev[order.id] ?? {}) }
+      next[itemId] = nextNote
+      return { ...prev, [order.id]: next }
     })
     setAdjustedPaymentMethods(prev => {
-      const next = { ...(prev[orderId] ?? {}) }
+      const next = { ...(prev[order.id] ?? {}) }
       next[itemId] = editingPaymentMethod
-      return { ...prev, [orderId]: next }
+      return { ...prev, [order.id]: next }
     })
-    setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote(''); setEditingPaymentMethod('cash')
+    setEditingItem(null); setEditingValue(''); setEditingQuantity('1'); setEditingPct(''); setEditingNote(''); editingPriceDraftRef.current = ''; editingPctDraftRef.current = ''; editingQuantityDraftRef.current = '1'; editingNoteDraftRef.current = ''; setEditingPaymentMethod('cash')
   }
 
   const setOrderItemPaymentMethod = (orderId: string, itemId: string, paymentMethod: PaymentMethod) => {
@@ -468,11 +632,44 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     })
   }
 
+  const setPendingSplitPaymentMethod = (orderId: string, itemId: string, paymentMethod: PaymentMethod) => {
+    setPendingItemSplits(prev => {
+      const current = prev[orderId]?.[itemId]
+      if (!current) return prev
+      return {
+        ...prev,
+        [orderId]: {
+          ...(prev[orderId] ?? {}),
+          [itemId]: { ...current, paymentMethod },
+        },
+      }
+    })
+  }
+
+  const cancelPendingSplit = (orderId: string, itemId: string) => {
+    setPendingItemSplits(prev => {
+      const nextForOrder = { ...(prev[orderId] ?? {}) }
+      delete nextForOrder[itemId]
+      return { ...prev, [orderId]: nextForOrder }
+    })
+    setEditingItem(current => current?.orderId === orderId && current.itemId === itemId ? null : current)
+  }
+
   const setAllOrderPaymentMethods = (order: (typeof orders)[number], paymentMethod: PaymentMethod) => {
     setAdjustedPaymentMethods(prev => ({
       ...prev,
       [order.id]: Object.fromEntries(order.items.map(item => [item.itemId!, paymentMethod])),
     }))
+    setPendingItemSplits(prev => {
+      const current = prev[order.id]
+      if (!current) return prev
+      return {
+        ...prev,
+        [order.id]: Object.fromEntries(
+          Object.entries(current).map(([itemId, split]) => [itemId, { ...split, paymentMethod }])
+        ),
+      }
+    })
   }
 
   // ---- 가격/메모 DB 저장 ----
@@ -481,6 +678,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     const priceMap = adjustedPrices[order.id] ?? {}
     const noteMap  = adjustedNotes[order.id]  ?? {}
     const paymentMethodMap = adjustedPaymentMethods[order.id] ?? {}
+    const splitMap = pendingItemSplits[order.id] ?? {}
     const appliedMileageRate = order.mileageRate ?? mileageRate
     setSavingOrderId(order.id)
     setSaveErrorByOrderId((prev) => {
@@ -490,7 +688,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       return next
     })
     try {
+      const splitEntries = order.items
+        .map((item) => {
+          const split = item.itemId ? splitMap[item.itemId] : undefined
+          if (!split || !item.itemId || split.quantity >= item.quantity) return null
+          return { sourceItem: item, splitQuantity: split.quantity, price: split.price, note: split.note, paymentMethod: split.paymentMethod }
+        })
+        .filter((entry) => entry !== null)
+      const splitSourceIds = new Set(splitEntries.map((entry) => entry.sourceItem.itemId!))
       const itemUpdates = order.items
+        .filter((item) => !splitSourceIds.has(item.itemId!))
         .map((item) => ({
           itemId: item.itemId!,
           price: parseAdjustedPrice(priceMap[item.itemId!], item.price),
@@ -507,17 +714,32 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           const noteChanged  = u.note  !== originalItem.note
           return priceChanged || quantityChanged || paymentMethodChanged || noteChanged
         })
-      const nextItems = order.items.map((item) => ({
-        ...item,
-        price: parseAdjustedPrice(priceMap[item.itemId!], item.price),
-        quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[item.itemId!], item.quantity),
-        paymentMethod: paymentMethodMap[item.itemId!] ?? item.paymentMethod,
-      }))
+      const nextItems = order.items.flatMap((item) => {
+        const split = item.itemId ? splitMap[item.itemId] : undefined
+        if (split && item.itemId && split.quantity < item.quantity) {
+          return [
+            { ...item, quantity: item.quantity - split.quantity },
+            { ...item, price: split.price, quantity: split.quantity, paymentMethod: split.paymentMethod, note: split.note },
+          ]
+        }
+        return [{
+          ...item,
+          price: parseAdjustedPrice(priceMap[item.itemId!], item.price),
+          quantity: parseAdjustedQuantity(adjustedQuantities[order.id]?.[item.itemId!], item.quantity),
+          paymentMethod: paymentMethodMap[item.itemId!] ?? item.paymentMethod,
+        }]
+      })
       const newTotal = nextItems.reduce((sum, item) => {
         return sum + getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, appliedMileageRate)
       }, 0)
       const nextOrderPaymentMethod = deriveOrderPaymentMethod(nextItems)
-      await updateItemPrices(order.id, itemUpdates, newTotal, nextOrderPaymentMethod, nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate)
+      let splitResults: { sourceItemId: string; insertedItemId: string }[] = []
+      if (splitEntries.length > 0) {
+        splitResults = await splitOrderItems(order.id, splitEntries, newTotal, nextOrderPaymentMethod, nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate)
+      }
+      if (itemUpdates.length > 0 || splitEntries.length === 0) {
+        await updateItemPrices(order.id, itemUpdates, newTotal, nextOrderPaymentMethod, nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate)
+      }
       const adjustmentEntries = itemUpdates
         .map((update) => {
           const item = order.items.find((current) => current.itemId === update.itemId)
@@ -533,9 +755,30 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           }
         })
         .filter((entry) => entry !== null)
-      if (adjustmentEntries.length > 0) {
-        await createPriceAdjustments(adjustmentEntries)
+      const splitAdjustmentEntries = splitEntries
+        .map((split) => {
+          const inserted = splitResults.find((result) => result.sourceItemId === split.sourceItem.itemId)
+          if (!inserted || split.sourceItem.price === split.price) return null
+          return {
+            orderId: order.id,
+            itemId: inserted.insertedItemId,
+            cardName: split.sourceItem.cardName,
+            rarity: split.sourceItem.rarity,
+            previousPrice: split.sourceItem.price,
+            nextPrice: split.price,
+            note: split.note ?? null,
+          }
+        })
+        .filter((entry) => entry !== null)
+      if (adjustmentEntries.length > 0 || splitAdjustmentEntries.length > 0) {
+        await createPriceAdjustments([...adjustmentEntries, ...splitAdjustmentEntries])
       }
+      setPendingItemSplits(prev => {
+        if (!prev[order.id]) return prev
+        const next = { ...prev }
+        delete next[order.id]
+        return next
+      })
       setAdjustedOrderIds(prev => new Set([...prev, order.id]))
     } catch (error) {
       console.error('[handleSavePrices]', error)
@@ -546,6 +789,140 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       setSaveErrorByOrderId((prev) => ({ ...prev, [order.id]: message }))
     } finally {
       setSavingOrderId(null)
+    }
+  }
+
+  const handleCancelPriceAdjustments = async (
+    order: (typeof orders)[number],
+    entries: (typeof priceAdjustmentsByOrderId)[string]
+  ) => {
+    if (entries.length === 0) return
+
+    const appliedMileageRate = order.mileageRate ?? mileageRate
+    const oldestAdjustmentByItemId = new Map<string, (typeof entries)[number]>()
+    const sortedEntries = [...entries].sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime())
+
+    for (const entry of sortedEntries) {
+      if (!oldestAdjustmentByItemId.has(entry.itemId)) {
+        oldestAdjustmentByItemId.set(entry.itemId, entry)
+      }
+    }
+
+    const itemUpdates = new Map<string, {
+      itemId: string
+      price: number
+      quantity: number
+      note: string | null
+      paymentMethod: PaymentMethod
+    }>()
+    const itemDeletes = new Set<string>()
+
+    for (const [itemId, entry] of oldestAdjustmentByItemId) {
+      const item = order.items.find((current) => current.itemId === itemId)
+      if (!item?.itemId) continue
+
+      const mergeTarget = order.items.find((candidate) => {
+        if (!candidate.itemId || candidate.itemId === itemId || itemDeletes.has(candidate.itemId)) return false
+        return (
+          candidate.cardId === item.cardId &&
+          candidate.rarity === item.rarity &&
+          candidate.price === entry.previousPrice &&
+          (candidate.note ?? null) === null
+        )
+      })
+
+      if (mergeTarget?.itemId) {
+        const existingTargetUpdate = itemUpdates.get(mergeTarget.itemId)
+        itemUpdates.set(mergeTarget.itemId, {
+          itemId: mergeTarget.itemId,
+          price: mergeTarget.price,
+          quantity: (existingTargetUpdate?.quantity ?? mergeTarget.quantity) + item.quantity,
+          note: existingTargetUpdate?.note ?? mergeTarget.note ?? null,
+          paymentMethod: existingTargetUpdate?.paymentMethod ?? mergeTarget.paymentMethod,
+        })
+        itemDeletes.add(itemId)
+        continue
+      }
+
+      itemUpdates.set(itemId, {
+        itemId,
+        price: entry.previousPrice,
+        quantity: item.quantity,
+        note: null,
+        paymentMethod: item.paymentMethod,
+      })
+    }
+
+    const restoredItems = order.items
+      .filter((item) => !item.itemId || !itemDeletes.has(item.itemId))
+      .map((item) => {
+        const update = item.itemId ? itemUpdates.get(item.itemId) : undefined
+        return update
+          ? { ...item, price: update.price, quantity: update.quantity, note: update.note, paymentMethod: update.paymentMethod }
+          : item
+      })
+
+    const newTotal = restoredItems.reduce((sum, item) => {
+      return sum + getAppliedItemTotal(item.price, item.quantity, item.paymentMethod, appliedMileageRate)
+    }, 0)
+    const nextOrderPaymentMethod = deriveOrderPaymentMethod(restoredItems)
+
+    setCancelingAdjustmentOrderId(order.id)
+    setSaveErrorByOrderId((prev) => {
+      if (!prev[order.id]) return prev
+      const next = { ...prev }
+      delete next[order.id]
+      return next
+    })
+
+    try {
+      await cancelPriceAdjustments(
+        order.id,
+        [...itemUpdates.values()],
+        [...itemDeletes],
+        newTotal,
+        nextOrderPaymentMethod,
+        nextOrderPaymentMethod === 'cash' ? null : appliedMileageRate
+      )
+      setAdjustedOrderIds((prev) => {
+        if (!prev.has(order.id)) return prev
+        const next = new Set(prev)
+        next.delete(order.id)
+        return next
+      })
+      setAdjustedPrices((prev) => {
+        if (!prev[order.id]) return prev
+        const next = { ...prev }
+        delete next[order.id]
+        return next
+      })
+      setAdjustedQuantities((prev) => {
+        if (!prev[order.id]) return prev
+        const next = { ...prev }
+        delete next[order.id]
+        return next
+      })
+      setAdjustedNotes((prev) => {
+        if (!prev[order.id]) return prev
+        const next = { ...prev }
+        delete next[order.id]
+        return next
+      })
+      setPendingItemSplits((prev) => {
+        if (!prev[order.id]) return prev
+        const next = { ...prev }
+        delete next[order.id]
+        return next
+      })
+    } catch (error) {
+      console.error('[handleCancelPriceAdjustments]', error)
+      const message =
+        error instanceof Error
+          ? error.message
+          : '가격 조정 취소 중 오류가 발생했습니다. 다시 시도해 주세요.'
+      setSaveErrorByOrderId((prev) => ({ ...prev, [order.id]: message }))
+    } finally {
+      setCancelingAdjustmentOrderId(null)
     }
   }
 
@@ -593,6 +970,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         return { ...prev, [order.id]: next }
       })
       setAdjustedPaymentMethods((prev) => {
+        const next = { ...(prev[order.id] ?? {}) }
+        delete next[target.itemId!]
+        return { ...prev, [order.id]: next }
+      })
+      setPendingItemSplits((prev) => {
         const next = { ...(prev[order.id] ?? {}) }
         delete next[target.itemId!]
         return { ...prev, [order.id]: next }
@@ -839,12 +1221,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     ? cards.filter(c => c.name.includes(cardSearch) || c.code.includes(cardSearch))
     : cards
 
-  const filteredOrders = orders.filter((order) => {
+  const filteredOrders = useMemo(() => orders.filter((order) => {
     const matchesStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter
     if (!matchesStatus) return false
-    if (!orderSearch.trim()) return true
+    if (!deferredOrderSearch.trim()) return true
 
-    const query = orderSearch.trim().toLowerCase()
+    const query = deferredOrderSearch.trim().toLowerCase()
     return [
       order.customerName,
       order.phoneNumber,
@@ -854,7 +1236,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     ]
       .filter(Boolean)
       .some((value) => value.toLowerCase().includes(query))
-  })
+  }), [deferredOrderSearch, orderStatusFilter, orders])
 
   // 통계
   const today = new Date()
@@ -1233,9 +1615,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const paymentMethodsChanged = paymentMethodArr
                       ? order.items.some((item) => paymentMethodArr[item.itemId!] !== undefined && paymentMethodArr[item.itemId!] !== item.paymentMethod)
                       : false
-                    const hasChanges = pricesChanged || quantitiesChanged || notesChanged || paymentMethodsChanged
-                    const isAdjusted = adjustedOrderIds.has(order.id)
+                    const splitArr = pendingItemSplits[order.id]
+                    const splitsChanged = splitArr ? Object.keys(splitArr).length > 0 : false
+                    const hasChanges = pricesChanged || quantitiesChanged || notesChanged || paymentMethodsChanged || splitsChanged
                     const orderAuditEntries = priceAdjustmentsByOrderId[order.id] ?? []
+                    const isAdjusted = adjustedOrderIds.has(order.id) || orderAuditEntries.length > 0
+                    const orderGameBadges = getOrderGameBadges(order)
                     const effectiveOrderPaymentMethod = deriveOrderPaymentMethod(
                       order.items.map((item) => ({
                         paymentMethod: paymentMethodArr?.[item.itemId!] ?? item.paymentMethod,
@@ -1291,9 +1676,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                           className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-zinc-800"
                         >
                           <div className="flex items-center gap-4">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700">
-                              <User className="h-5 w-5 text-zinc-400" />
-                            </div>
+                            <OrderGameBadges games={orderGameBadges} />
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-semibold text-white">{order.customerName}</span>
@@ -1384,21 +1767,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               </div>
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
-                                const cardImg = item.cardId ? cards.find(c => c.id === item.cardId)?.imageUrl : undefined
+                                const cardImg = item.cardId ? cardImageById.get(item.cardId) : undefined
                                 const savedPrice = item.itemId ? priceArr?.[item.itemId] : undefined
                                 const savedQuantity = item.itemId ? quantityArr?.[item.itemId] : undefined
                                 const savedPaymentMethod = item.itemId ? paymentMethodArr?.[item.itemId] : undefined
-                                const displayPrice = savedPrice !== undefined ? (parseFloat(savedPrice) || item.price) : item.price
-                                const displayQuantity = savedQuantity !== undefined ? parseAdjustedQuantity(savedQuantity, item.quantity) : item.quantity
+                                const pendingSplit = item.itemId ? splitArr?.[item.itemId] : undefined
+                                const remainingQuantity = pendingSplit ? Math.max(1, item.quantity - pendingSplit.quantity) : item.quantity
+                                const displayPrice = pendingSplit ? item.price : savedPrice !== undefined ? (parseFloat(savedPrice) || item.price) : item.price
+                                const displayQuantity = pendingSplit ? remainingQuantity : savedQuantity !== undefined ? parseAdjustedQuantity(savedQuantity, item.quantity) : item.quantity
                                 const displayPaymentMethod = savedPaymentMethod ?? item.paymentMethod
                                 const displayNote  = item.itemId && noteArr?.[item.itemId] !== undefined ? noteArr[item.itemId] : item.note
                                 const isPriceChanged = savedPrice !== undefined && parseFloat(savedPrice) !== item.price
-                                const isQuantityChanged = savedQuantity !== undefined && parseAdjustedQuantity(savedQuantity, item.quantity) !== item.quantity
+                                const isQuantityChanged = pendingSplit ? true : savedQuantity !== undefined && parseAdjustedQuantity(savedQuantity, item.quantity) !== item.quantity
                                 const isPaymentMethodChanged = savedPaymentMethod !== undefined && savedPaymentMethod !== item.paymentMethod
-                                const isItemEditing = editingItem?.orderId === order.id && editingItem?.itemId === item.itemId
+                                const hasAdjustmentHistory = item.itemId ? orderAuditEntries.some(entry => entry.itemId === item.itemId) : false
+                                const isAdjustedVisual = hasAdjustmentHistory || isPriceChanged || isPaymentMethodChanged || Boolean(displayNote)
+                                const isPriceAdjustedVisual = hasAdjustmentHistory || isPriceChanged || Boolean(displayNote)
+                                const isItemEditing = editingItem?.orderId === order.id && editingItem?.itemId === item.itemId && editingItem.variant === 'base'
+                                const isSplitEditing = editingItem?.orderId === order.id && editingItem?.itemId === item.itemId && editingItem.variant === 'split'
 
                                 return (
-                                  <div key={item.itemId ?? `${item.cardId}-${item.rarity}-${idx}`} className="rounded-lg bg-zinc-900">
+                                  <div
+                                    key={item.itemId ?? `${item.cardId}-${item.rarity}-${idx}`}
+                                    className={`overflow-hidden rounded-lg border transition-colors ${
+                                      isAdjustedVisual
+                                        ? 'border-sky-500/35 bg-sky-500/10 shadow-[inset_3px_0_0_rgba(14,165,233,0.9)]'
+                                        : 'border-transparent bg-zinc-900'
+                                    }`}
+                                  >
                                     <div className="flex items-center gap-2 p-2">
                                       <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-zinc-800">
                                         {cardImg ? (
@@ -1413,6 +1809,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           {displayPaymentMethod === 'mileage' ? <Coins className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
                                           {displayPaymentMethod === 'mileage' ? '마일리지' : '현금'}
                                         </span>
+                                        {isPriceAdjustedVisual && (
+                                          <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/15 px-2 py-0.5 text-[11px] font-bold text-sky-200">
+                                            <Scissors className="h-3 w-3" />
+                                            가격조정됨
+                                          </span>
+                                        )}
                                         {displayNote && (
                                           <span className="flex items-center gap-1 text-xs text-sky-400/70">
                                             <MessageSquare className="h-3 w-3" />{displayNote}
@@ -1446,7 +1848,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           if (isItemEditing) setEditingItem(null)
-                                          else if (item.itemId) openEditItem(order.id, item.itemId, item.price, item.quantity, item.note, item.paymentMethod)
+                                          else if (item.itemId) openEditItem(order.id, item.itemId, item.price, item.quantity, item.note, item.paymentMethod, 'base')
                                         }}
                                         className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                                           isItemEditing ? 'bg-zinc-600 text-zinc-300' : 'bg-zinc-700/60 text-zinc-400 hover:bg-zinc-700 hover:text-white'
@@ -1458,14 +1860,73 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                     </div>
 
                                     {/* 인라인 편집 패널 */}
-                                    {isItemEditing && (
-                                      <div className="border-t border-zinc-800 px-2 pb-3 pt-2.5 space-y-2">
+                                    {pendingSplit && (
+                                      <div className="mx-2 mb-2 flex items-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 p-2 ring-1 ring-sky-400/10">
+                                        <div className="flex h-10 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-zinc-950/70">
+                                          <Scissors className="h-4 w-4 text-sky-300" />
+                                        </div>
+                                        <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${colors.bg} ${colors.text}`}>{item.rarity}</span>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="truncate text-sm font-semibold text-sky-100">{item.cardName}</span>
+                                            <span className="shrink-0 rounded-full bg-sky-400/15 px-2 py-0.5 text-[11px] font-bold text-sky-200">감가 분리 예정</span>
+                                          </div>
+                                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                                            <span>원래 장당 {formatPrice(item.price)}</span>
+                                            <span>→</span>
+                                            <span className="font-bold text-sky-300">조정 장당 {formatPrice(pendingSplit.price)}</span>
+                                            {pendingSplit.note && <span className="truncate text-zinc-400">사유: {pendingSplit.note}</span>}
+                                          </div>
+                                        </div>
+                                        <span className="shrink-0 text-xs font-bold text-sky-300">x{pendingSplit.quantity}</span>
+                                        <div className="w-[156px] shrink-0">
+                                          <PaymentMethodToggle
+                                            value={pendingSplit.paymentMethod}
+                                            onChange={(nextValue) => item.itemId && setPendingSplitPaymentMethod(order.id, item.itemId, nextValue)}
+                                            compact
+                                          />
+                                        </div>
+                                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${pendingSplit.paymentMethod === 'mileage' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                                          {pendingSplit.paymentMethod === 'mileage' ? '마일리지' : '현금'}
+                                        </span>
+                                        <span className="shrink-0 text-sm font-black text-sky-300">
+                                          {formatPrice(getAppliedItemTotal(pendingSplit.price, pendingSplit.quantity, pendingSplit.paymentMethod, order.mileageRate ?? mileageRate))}
+                                        </span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (isSplitEditing) setEditingItem(null)
+                                            else if (item.itemId) openEditItem(order.id, item.itemId, item.price, item.quantity, item.note, item.paymentMethod, 'split')
+                                          }}
+                                          className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                                            isSplitEditing ? 'bg-sky-500/25 text-sky-200' : 'bg-sky-500/15 text-sky-300 hover:bg-sky-500/25'
+                                          }`}
+                                        >
+                                          <Scissors className="h-3 w-3" />
+                                          {isSplitEditing ? '닫기' : '수정'}
+                                        </button>
+                                        {item.itemId && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); cancelPendingSplit(order.id, item.itemId!) }}
+                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-500 hover:bg-red-500/20 hover:text-red-300"
+                                            title="분리 취소"
+                                          >
+                                            <X className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {(isItemEditing || isSplitEditing) && (
+                                      <div className={`border-t px-2 pb-3 pt-2.5 space-y-2 ${isSplitEditing ? 'border-sky-500/25 bg-sky-500/5' : 'border-zinc-800'}`}>
                                         <div className="flex flex-wrap items-center gap-2">
                                           <div className="flex items-center gap-1">
                                             <span className="text-xs text-zinc-500 shrink-0">직접</span>
                                             <input
                                               type="number" min="0" step="100"
-                                              value={editingValue}
+                                              key={`${editingItem?.orderId}-${editingItem?.itemId}-${editingItem?.variant}-price`}
+                                              ref={editingPriceInputRef}
+                                              defaultValue={editingValue}
                                               onChange={(e) => handleDirectChange(e.target.value, item.price)}
                                               onClick={(e) => e.stopPropagation()}
                                               className="w-24 rounded-lg border border-sky-500/60 bg-zinc-800 px-2 py-1.5 text-right text-sm font-medium text-sky-300 focus:border-sky-400 focus:outline-none"
@@ -1477,7 +1938,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                             <span className="text-xs text-zinc-500 shrink-0">감가</span>
                                             <input
                                               type="number" min="0" max="99" step="5"
-                                              value={editingPct}
+                                              key={`${editingItem?.orderId}-${editingItem?.itemId}-${editingItem?.variant}-pct`}
+                                              ref={editingPctInputRef}
+                                              defaultValue={editingPct}
                                               placeholder="0"
                                               onChange={(e) => handlePctChange(e.target.value, item.price)}
                                               onClick={(e) => e.stopPropagation()}
@@ -1487,27 +1950,37 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           </div>
                                           <span className="text-zinc-700">/</span>
                                           <div className="flex items-center gap-1">
-                                            <span className="text-xs text-zinc-500 shrink-0">매수</span>
+                                            <span className="text-xs text-zinc-500 shrink-0">수정 장수</span>
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                setEditingQuantity((prev) => String(Math.max(1, (parseInt(prev, 10) || item.quantity) - 1)))
+                                                const nextQuantity = String(Math.max(1, (parseInt(editingQuantityDraftRef.current, 10) || 1) - 1))
+                                                editingQuantityDraftRef.current = nextQuantity
+                                                if (editingQuantityInputRef.current) editingQuantityInputRef.current.value = nextQuantity
                                               }}
                                               className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                                             >
                                               <Minus className="h-3 w-3" />
                                             </button>
                                             <input
-                                              type="number" min="1" step="1"
-                                              value={editingQuantity}
-                                              onChange={(e) => setEditingQuantity(String(Math.max(1, parseInt(e.target.value || '1', 10) || 1)))}
+                                              type="number" min="1" max={item.quantity} step="1"
+                                              key={`${editingItem?.orderId}-${editingItem?.itemId}-${editingItem?.variant}-quantity`}
+                                              ref={editingQuantityInputRef}
+                                              defaultValue={editingQuantity}
+                                              onChange={(e) => {
+                                                const nextQuantity = String(Math.min(item.quantity, Math.max(1, parseInt(e.target.value || '1', 10) || 1)))
+                                                editingQuantityDraftRef.current = nextQuantity
+                                                e.target.value = nextQuantity
+                                              }}
                                               onClick={(e) => e.stopPropagation()}
                                               className="w-14 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-center text-sm font-medium text-zinc-300 focus:border-sky-400 focus:outline-none"
                                             />
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                setEditingQuantity((prev) => String((parseInt(prev, 10) || item.quantity) + 1))
+                                                const nextQuantity = String(Math.min(item.quantity, (parseInt(editingQuantityDraftRef.current, 10) || 1) + 1))
+                                                editingQuantityDraftRef.current = nextQuantity
+                                                if (editingQuantityInputRef.current) editingQuantityInputRef.current.value = nextQuantity
                                               }}
                                               className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                                             >
@@ -1523,15 +1996,19 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           </div>
                                           <div className="flex gap-1 ml-auto">
                                             <button
-                                              onClick={(e) => { e.stopPropagation(); handleDeleteItem(order, idx) }}
-                                              disabled={deletingItemKey === item.itemId}
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                if (isSplitEditing && item.itemId) cancelPendingSplit(order.id, item.itemId)
+                                                else handleDeleteItem(order, idx)
+                                              }}
+                                              disabled={!isSplitEditing && deletingItemKey === item.itemId}
                                               className="flex items-center gap-1 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
                                             >
                                               <Trash2 className="h-3 w-3" />
-                                              삭제
+                                              {isSplitEditing ? '분리 취소' : '삭제'}
                                             </button>
                                             <button
-                                              onClick={(e) => { e.stopPropagation(); item.itemId && confirmEditItem(order.id, item.itemId) }}
+                                              onClick={(e) => { e.stopPropagation(); item.itemId && confirmEditItem(order, item.itemId) }}
                                               className="flex items-center gap-1 rounded-lg bg-sky-500/20 px-3 py-1.5 text-xs font-medium text-sky-400 hover:bg-sky-500/30"
                                             >
                                               <Check className="h-3 w-3" />확인
@@ -1549,8 +2026,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           <MessageSquare className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
                                           <input
                                             type="text"
-                                            value={editingNote}
-                                            onChange={(e) => setEditingNote(e.target.value)}
+                                            key={`${editingItem?.orderId}-${editingItem?.itemId}-${editingItem?.variant}-note`}
+                                            defaultValue={editingNote}
+                                            onChange={(e) => { editingNoteDraftRef.current = e.target.value }}
                                             onClick={(e) => e.stopPropagation()}
                                             placeholder="감가 사유 메모 (선택)"
                                             maxLength={100}
@@ -1586,11 +2064,35 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               </div>
                             )}
 
+                            {saveError && !hasChanges && (
+                              <p className="mb-3 rounded-lg bg-red-950/60 px-3 py-2 text-xs text-red-300">
+                                {saveError}
+                              </p>
+                            )}
+
                             {orderAuditEntries.length > 0 && (
                               <div className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                                <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                                  <Scissors className="h-3.5 w-3.5 text-sky-400" />
-                                  가격 조정 이력
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+                                    <Scissors className="h-3.5 w-3.5 text-sky-400" />
+                                    가격 조정 이력
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleCancelPriceAdjustments(order, orderAuditEntries)
+                                    }}
+                                    disabled={cancelingAdjustmentOrderId === order.id}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-200 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {cancelingAdjustmentOrderId === order.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <X className="h-3 w-3" />
+                                    )}
+                                    가격 조정 취소
+                                  </button>
                                 </div>
                                 <div className="space-y-2">
                                   {orderAuditEntries.slice(0, 6).map((entry) => (

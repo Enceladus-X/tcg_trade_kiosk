@@ -72,6 +72,8 @@ export const rarityColors: Record<string, { bg: string; text: string; border: st
   N:   { bg: 'bg-zinc-700',    text: 'text-zinc-200',   border: 'border-zinc-600' },
   R:   { bg: 'bg-blue-900',    text: 'text-blue-200',   border: 'border-blue-700' },
   P:   { bg: 'bg-[linear-gradient(132deg,rgba(202,240,255,0.94)_0%,rgba(214,225,255,0.94)_18%,rgba(245,214,255,0.92)_36%,rgba(255,236,214,0.9)_54%,rgba(220,255,244,0.9)_74%,rgba(213,228,255,0.94)_100%)]', text: 'text-slate-900 [text-shadow:0_1px_0_rgba(255,255,255,0.7)]', border: 'border-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_0_0_1px_rgba(160,190,255,0.24)]' },
+  OFPSE: { bg: 'bg-[linear-gradient(132deg,rgba(202,240,255,0.94)_0%,rgba(214,225,255,0.94)_18%,rgba(245,214,255,0.92)_36%,rgba(255,236,214,0.9)_54%,rgba(220,255,244,0.9)_74%,rgba(213,228,255,0.94)_100%)]', text: 'text-slate-900 [text-shadow:0_1px_0_rgba(255,255,255,0.7)]', border: 'border-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_0_0_1px_rgba(160,190,255,0.24)]' },
+  GRM: { bg: 'bg-[linear-gradient(135deg,#09090b_0%,#1c1204_32%,#b7791f_58%,#f6d365_72%,#111111_100%)]', text: 'text-amber-100 [text-shadow:0_1px_0_rgba(0,0,0,0.9),0_0_8px_rgba(245,158,11,0.45)]', border: 'border-amber-300/70 shadow-[inset_0_1px_0_rgba(255,224,138,0.45),0_0_0_1px_rgba(120,53,15,0.45)]' },
   SR:  { bg: 'bg-amber-900',   text: 'text-amber-200',  border: 'border-amber-700' },
   UR:  { bg: 'bg-rose-900',    text: 'text-rose-200',   border: 'border-rose-700' },
   UL:  { bg: 'bg-purple-900',  text: 'text-purple-200', border: 'border-purple-700' },
@@ -97,11 +99,19 @@ function strHash(s: string): number {
 
 export function isPrismRarity(rarity: string) {
   const normalized = rarity.trim().toLowerCase()
-  return normalized === 'p' || rarity.includes('★')
+  return normalized === 'p' || (normalized !== 'ofur' && normalized.startsWith('of')) || rarity.includes('★')
 }
 
 export function getRarityColors(rarity: string) {
   const normalized = rarity.trim().toLowerCase()
+
+  if (normalized !== 'ofur' && (normalized === 'ofpse' || normalized.startsWith('of'))) {
+    return rarityColors.OFPSE
+  }
+
+  if (normalized === 'grm') {
+    return rarityColors.GRM
+  }
 
   if (normalized === 'l' || normalized === '리더') {
     return {
