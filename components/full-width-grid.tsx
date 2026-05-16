@@ -72,7 +72,10 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
     }
 
     const currentSelectedTab = selectedTabRef.current
-    if (currentSelectedTab !== '__ALL_TABS__' && currentSelectedTab && nextVisibleTabs.includes(currentSelectedTab)) {
+    if (
+      currentSelectedTab === '__ALL_TABS__' ||
+      (currentSelectedTab && nextVisibleTabs.includes(currentSelectedTab))
+    ) {
       return
     }
 
