@@ -300,7 +300,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     deleteOrder,
     deleteOrderItem,
   } = useOrders()
-  const { cards, addCard, setCardStopped, updateCardAsync } = useCards()
+  const { cards, addCard, setCardStopped, toggleRarity, updateCardAsync } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
   const { mileageRate, mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
@@ -340,6 +340,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('orders')
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null)
+  const [rejectConfirmOrderId, setRejectConfirmOrderId] = useState<string | null>(null)
   const [orderSearch, setOrderSearch] = useState('')
   const deferredOrderSearch = useDeferredValue(orderSearch)
 
@@ -387,6 +388,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   // 통계
   const [statsRange, setStatsRange] = useState<'today' | 'week' | 'month' | 'all'>('today')
+  const [topCardsLimit, setTopCardsLimit] = useState<10 | 20 | 50 | 'all'>(10)
 
   // 카드 관리 — 일괄 편집
   const [bulkEditMode, setBulkEditMode] = useState(false)
@@ -1273,7 +1275,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     }
   }
   const allStatsCards = [...topCardsMap.values()].sort((a, b) => b.count - a.count)
-  const topCards = allStatsCards.slice(0, 10)
+  const topCards = topCardsLimit === 'all' ? allStatsCards : allStatsCards.slice(0, topCardsLimit)
+  const topCardsTitle = topCardsLimit === 'all' ? '인기 매입 카드 전체' : `인기 매입 카드 TOP ${topCardsLimit}`
 
   // 일괄 편집 — 현재 탭 카드 + 레어도 컬럼
   const statsAnalytics = useMemo(() => {
@@ -2117,19 +2120,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             )}
 
                             <div className="flex gap-2">
-                              {order.status === 'pending' && (
+                              {order.status === 'pending' && rejectConfirmOrderId !== order.id && (
                                 <>
-                                  <button onClick={() => updateOrderStatus(order.id, 'approved')} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500">
+                                  <button onClick={() => { setRejectConfirmOrderId(null); updateOrderStatus(order.id, 'approved') }} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500">
                                     <CheckCircle className="h-4 w-4" />승인
                                   </button>
-                                  <button onClick={() => updateOrderStatus(order.id, 'rejected')} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600/20 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-600/30">
+                                  <button onClick={() => setRejectConfirmOrderId(order.id)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600/20 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-600/30">
                                     <X className="h-4 w-4" />거절
                                   </button>
                                 </>
                               )}
+                              {order.status === 'pending' && rejectConfirmOrderId === order.id && (
+                                <div className="flex flex-1 gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-1.5">
+                                  <button onClick={() => { updateOrderStatus(order.id, 'rejected'); setRejectConfirmOrderId(null) }} className="flex flex-1 items-center justify-center gap-2 rounded-md bg-red-600 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-500">
+                                    <X className="h-4 w-4" />거절 확인
+                                  </button>
+                                  <button onClick={() => setRejectConfirmOrderId(null)} className="flex flex-1 items-center justify-center rounded-md bg-zinc-800 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white">
+                                    취소
+                                  </button>
+                                </div>
+                              )}
                               {order.status === 'approved' && (
                                 <button onClick={() => updateOrderStatus(order.id, 'paid')} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500">
                                   <DollarSign className="h-4 w-4" />지급 완료 처리
+                                </button>
+                              )}
+                              {order.status === 'rejected' && (
+                                <button onClick={() => updateOrderStatus(order.id, 'pending')} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-500/15 py-2 text-sm font-medium text-amber-300 transition-colors hover:bg-amber-500/25">
+                                  <Play className="h-4 w-4" />거절 취소
                                 </button>
                               )}
                               <button onClick={() => deleteOrder(order.id)} className="flex items-center justify-center rounded-lg bg-zinc-700 px-4 py-2 text-zinc-400 transition-colors hover:bg-zinc-600 hover:text-white">
@@ -2258,6 +2276,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   {bulkEditMode ? '일반 보기' : '일괄 편집'}
                 </button>
               </div>
+              {!bulkEditMode && (
+                <p className="mb-3 text-xs text-zinc-500">
+                  레어도 칩을 클릭하면 해당 가격만 매입 중지/재개할 수 있습니다.
+                </p>
+              )}
 
               {/* 일반 보기 */}
               {!bulkEditMode && (
@@ -2277,10 +2300,19 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             const colors = getRarityColors(rarity)
                             const enabled = card.enabledRarities[rarity]
                             return (
-                              <span key={rarity}
-                                className={`rounded px-1.5 py-0.5 text-xs font-bold ${enabled ? `${colors.bg} ${colors.text}` : 'bg-zinc-700 text-zinc-500'}`}>
+                              <button
+                                key={rarity}
+                                type="button"
+                                onClick={() => toggleRarity(card.id, rarity, !enabled)}
+                                title={enabled ? `${rarity} 매입 중지` : `${rarity} 매입 재개`}
+                                className={`rounded px-1.5 py-0.5 text-xs font-bold transition-all active:scale-95 ${
+                                  enabled
+                                    ? `${colors.bg} ${colors.text} hover:ring-2 hover:ring-red-400/40`
+                                    : 'bg-zinc-700 text-zinc-500 line-through hover:bg-emerald-500/15 hover:text-emerald-300'
+                                }`}
+                              >
                                 {rarity}
-                              </span>
+                              </button>
                             )
                           })}
                         </div>
@@ -2648,7 +2680,29 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 </div>
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><TrendingUp className="h-4 w-4 text-violet-300" />{'\uC778\uAE30 \uB9E4\uC785 \uCE74\uB4DC TOP 10'}<span className="text-xs font-normal text-zinc-600">{'\uAC70\uC808 \uC81C\uC678'}</span></h3>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+                      <TrendingUp className="h-4 w-4 text-violet-300" />
+                      {topCardsTitle}
+                      <span className="text-xs font-normal text-zinc-600">{'\uAC70\uC808 \uC81C\uC678'}</span>
+                    </h3>
+                    <div className="flex rounded-lg border border-zinc-800 bg-zinc-900/80 p-1">
+                      {([10, 20, 50, 'all'] as const).map((limit) => (
+                        <button
+                          key={String(limit)}
+                          type="button"
+                          onClick={() => setTopCardsLimit(limit)}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                            topCardsLimit === limit
+                              ? 'bg-violet-500 text-white'
+                              : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
+                          }`}
+                        >
+                          {limit === 'all' ? '전체' : `TOP ${limit}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {topCards.length === 0 ? <p className="py-6 text-center text-sm text-zinc-500">{'\uD45C\uC2DC\uD560 \uCE74\uB4DC \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'}</p> : (
                     <div className="grid grid-cols-2 gap-2">
                       {topCards.map((item, rank) => {

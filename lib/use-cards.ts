@@ -205,7 +205,7 @@ export function useCards() {
       if (!card) return
       if (stopped) {
         const disabledRarities = Object.fromEntries(
-          Object.keys(card.enabledRarities).map(r => [r, false])
+          card.prices.map(p => [p.rarity, false])
         )
         updateMutation.mutate({ cardId, updates: { isStopped: true, enabledRarities: disabledRarities } })
       } else {

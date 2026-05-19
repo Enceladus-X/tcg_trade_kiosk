@@ -163,13 +163,14 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   }, [])
 
   const handleSaveEdit = useCallback(async () => {
-    // 활성화 + 가격 > 0 인 레어도만 유효
+    // 가격은 보존하고, enabledRarities로 레어도별 매입 가능 여부를 분리한다.
     const newPrices = availableEditRarities
-      .filter(r => editEnabledRarities[r] && (editPrices[r] || 0) > 0)
+      .filter(r => (editPrices[r] || 0) > 0)
       .map(r => ({ rarity: r as RarityKey, price: editPrices[r] }))
     const newEnabledRarities = Object.fromEntries(
       availableEditRarities.map(r => [r, editEnabledRarities[r] && (editPrices[r] || 0) > 0])
     )
+    const hasEnabledPrice = Object.values(newEnabledRarities).some(Boolean)
     const selectedTab = tabObjects.find((tab) => tab.id === editTabId) ?? null
 
     setSaveError(null)
@@ -182,7 +183,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
         imageUrl: editImageUrl,
         enabledRarities: newEnabledRarities,
         prices: newPrices as CardPrice[],
-        isStopped: newPrices.length === 0,
+        isStopped: !hasEnabledPrice,
       })
       setEditMode(false)
       onClose()
