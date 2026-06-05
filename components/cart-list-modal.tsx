@@ -15,10 +15,14 @@ interface CartListModalProps {
 function PaymentToggle({
   value,
   onChange,
+  mileageRate,
 }: {
   value: PaymentMethod
   onChange: (value: PaymentMethod) => void
+  mileageRate: number
 }) {
+  const mileageBonusPercent = formatMileageBonusPercent(mileageRate)
+
   return (
     <div className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-700 bg-zinc-800 p-1">
       <button
@@ -36,17 +40,30 @@ function PaymentToggle({
       <button
         type="button"
         onClick={() => onChange('mileage')}
-        className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+        className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-bold transition-colors ${
           value === 'mileage'
             ? 'bg-emerald-500 text-black'
-            : 'text-zinc-400 hover:text-white'
+            : 'bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/30 hover:bg-emerald-500/15 hover:text-emerald-100'
         }`}
       >
-        <Coins className="h-3.5 w-3.5" />
+        <Coins className="h-3.5 w-3.5 shrink-0" />
         마일리지
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+            value === 'mileage'
+              ? 'bg-black/15 text-black'
+              : 'bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30'
+          }`}
+        >
+          {mileageBonusPercent}
+        </span>
       </button>
     </div>
   )
+}
+
+function formatMileageBonusPercent(rate: number) {
+  return `+${Math.max(0, Math.round((rate - 1) * 100))}%`
 }
 
 export function CartListModal({ onClose }: CartListModalProps) {
@@ -178,7 +195,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
                         <span className="font-semibold text-emerald-300">{formatPrice(mileageTotal)}</span>
                       </div>
                       {hasMileageItems && (
-                        <p className="text-xs text-zinc-500">마일리지 품목에는 x{mileageRate.toFixed(2)} 배율이 적용됩니다.</p>
+                        <p className="text-xs text-zinc-500">마일리지 품목에는 {formatMileageBonusPercent(mileageRate)} 추가 지급이 적용됩니다.</p>
                       )}
                     </div>
                   </div>
@@ -313,7 +330,12 @@ export function CartListModal({ onClose }: CartListModalProps) {
                 ) : (
                   <div className="divide-y divide-zinc-800 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
-                      <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                      <div>
+                        <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                        <p className="mt-1 text-xs font-medium text-emerald-300">
+                          마일리지 선택 시 {formatMileageBonusPercent(mileageRate)} 추가 지급
+                        </p>
+                      </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -326,10 +348,13 @@ export function CartListModal({ onClose }: CartListModalProps) {
                         <button
                           type="button"
                           onClick={() => setAllPaymentMethods('mileage')}
-                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition-colors hover:bg-emerald-500/25 hover:text-emerald-200"
                         >
                           <Coins className="h-3.5 w-3.5" />
                           전체 마일리지
+                          <span className="rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-black leading-none text-emerald-200 ring-1 ring-emerald-400/30">
+                            {formatMileageBonusPercent(mileageRate)}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -349,9 +374,10 @@ export function CartListModal({ onClose }: CartListModalProps) {
                               <span className="truncate text-sm font-medium text-white">{item.cardName}</span>
                             </div>
                             <p className="mt-1 text-xs text-zinc-500">{item.cardCode}</p>
-                            <div className="mt-2 max-w-[220px]">
+                            <div className="mt-2 w-[260px] max-w-full">
                               <PaymentToggle
                                 value={item.paymentMethod}
+                                mileageRate={mileageRate}
                                 onChange={(nextValue) => updatePaymentMethod(item.cardId, item.rarity, item.paymentMethod, nextValue)}
                               />
                             </div>
@@ -384,7 +410,7 @@ export function CartListModal({ onClose }: CartListModalProps) {
                               {formatPrice(itemTotal)}
                             </p>
                             <p className="text-xs text-zinc-500">
-                              {item.paymentMethod === 'mileage' ? `마일리지 x${mileageRate.toFixed(2)}` : '현금'}
+                              {item.paymentMethod === 'mileage' ? `마일리지 ${formatMileageBonusPercent(mileageRate)}` : '현금'}
                             </p>
                           </div>
 

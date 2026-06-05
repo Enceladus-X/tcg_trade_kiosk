@@ -191,18 +191,21 @@ function PaymentMethodToggle({
   value,
   onChange,
   compact = false,
+  mileageRate,
 }: {
   value: PaymentMethod
   onChange: (value: PaymentMethod) => void
   compact?: boolean
+  mileageRate: number
 }) {
+  const mileageBonusPercent = formatMileageBonusPercent(mileageRate)
   const wrapperClass = compact
     ? 'grid grid-cols-2 gap-1 rounded-lg border border-zinc-700 bg-zinc-800 p-1'
     : 'grid grid-cols-2 gap-1 rounded-xl border border-zinc-700 bg-zinc-800/90 p-1'
 
   const buttonClass = compact
-    ? 'flex items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors'
-    : 'flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors'
+    ? 'flex items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-semibold transition-colors'
+    : 'flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors'
 
   return (
     <div className={wrapperClass}>
@@ -217,13 +220,30 @@ function PaymentMethodToggle({
       <button
         type="button"
         onClick={() => onChange('mileage')}
-        className={`${buttonClass} ${value === 'mileage' ? 'bg-emerald-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+        className={`${buttonClass} ${
+          value === 'mileage'
+            ? 'bg-emerald-500 text-black'
+            : 'bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/30 hover:bg-emerald-500/15 hover:text-emerald-100'
+        }`}
       >
         <Coins className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
         마일리지
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[9px] font-black leading-none ${
+            value === 'mileage'
+              ? 'bg-black/15 text-black'
+              : 'bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30'
+          }`}
+        >
+          {mileageBonusPercent}
+        </span>
       </button>
     </div>
   )
+}
+
+function formatMileageBonusPercent(rate: number) {
+  return `+${Math.max(0, Math.round((rate - 1) * 100))}%`
 }
 
 function OrderGameBadges({ games }: { games: { name: string; imageUrl: string | null; count: number }[] }) {
@@ -1186,7 +1206,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           <div>계좌: ${order.bankName} ${order.accountNumber}</div>
           <div>결제수단: ${order.paymentMethod === 'mileage' ? '마일리지' : '현금'}</div>
           ${order.paymentMethod === 'mileage' && order.mileageRate
-            ? `<div>마일리지 배율: x${order.mileageRate.toFixed(2)} (+${mileagePercent}%)</div>
+            ? `<div>마일리지 추가 지급: +${mileagePercent}%</div>
                <div>마일리지 적용 지급액: ${formatPrice(mileageAppliedTotal ?? order.totalPrice)}</div>`
             : ''
           }
@@ -1742,7 +1762,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             <div className="mb-4 space-y-2">
                               <p className="text-xs font-medium text-zinc-500">매입 품목</p>
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                                <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                                <div>
+                                  <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
+                                  <p className="mt-1 text-xs font-medium text-emerald-300">
+                                    마일리지 선택 시 {formatMileageBonusPercent(order.mileageRate ?? mileageRate)} 추가 지급
+                                  </p>
+                                </div>
                                 <div className="flex gap-2">
                                   <button
                                     type="button"
@@ -1761,10 +1786,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                       e.stopPropagation()
                                       setAllOrderPaymentMethods(order, 'mileage')
                                     }}
-                                    className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                                    className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition-colors hover:bg-emerald-500/25 hover:text-emerald-200"
                                   >
                                     <Coins className="h-3.5 w-3.5" />
                                     전체 마일리지
+                                    <span className="rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-black leading-none text-emerald-200 ring-1 ring-emerald-400/30">
+                                      {formatMileageBonusPercent(order.mileageRate ?? mileageRate)}
+                                    </span>
                                   </button>
                                 </div>
                               </div>
@@ -1825,10 +1853,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                         )}
                                       </div>
                                       {item.itemId && (
-                                        <div className="w-[156px] shrink-0">
+                                        <div className="w-[220px] shrink-0">
                                           <PaymentMethodToggle
                                             value={displayPaymentMethod}
                                             onChange={(nextValue) => setOrderItemPaymentMethod(order.id, item.itemId!, nextValue)}
+                                            mileageRate={order.mileageRate ?? mileageRate}
                                             compact
                                           />
                                         </div>
@@ -1882,10 +1911,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           </div>
                                         </div>
                                         <span className="shrink-0 text-xs font-bold text-sky-300">x{pendingSplit.quantity}</span>
-                                        <div className="w-[156px] shrink-0">
+                                        <div className="w-[220px] shrink-0">
                                           <PaymentMethodToggle
                                             value={pendingSplit.paymentMethod}
                                             onChange={(nextValue) => item.itemId && setPendingSplitPaymentMethod(order.id, item.itemId, nextValue)}
+                                            mileageRate={order.mileageRate ?? mileageRate}
                                             compact
                                           />
                                         </div>
@@ -1990,10 +2020,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                               <Plus className="h-3 w-3" />
                                             </button>
                                           </div>
-                                          <div className="min-w-[168px]">
+                                          <div className="min-w-[220px]">
                                             <PaymentMethodToggle
                                               value={editingPaymentMethod}
                                               onChange={setEditingPaymentMethod}
+                                              mileageRate={order.mileageRate ?? mileageRate}
                                               compact
                                             />
                                           </div>

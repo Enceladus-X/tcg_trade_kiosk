@@ -1,7 +1,7 @@
 # TCG Trade Kiosk - Handover
 
 최종 업데이트: 2026-05-19  
-현재 기준 버전: `v0.5.9`
+현재 기준 버전: `v0.6.0`
 
 ---
 
@@ -34,10 +34,10 @@
 
 현재 저장소 기준 상태:
 
-- 현재 준비 버전: `v0.5.9`
-- 준비 중인 릴리스 파일명: `dist/MarinfordKiosk_v0.5.9.exe`
+- 현재 준비 버전: `v0.6.0`
+- 준비 중인 릴리스 파일명: `dist/MarinfordKiosk_v0.6.0.exe`
 - GitHub Releases 정리 완료
-- `release-notes/` 폴더에 `v0.1.0`부터 `v0.5.9`까지 문서 정리
+- `release-notes/` 폴더에 `v0.1.0`부터 `v0.6.0`까지 문서 정리
 - README는 공개용 수준으로 정리 완료
 - 이 `HANDOVER.md`는 내부 인수인계용 기준 문서
 
@@ -56,6 +56,7 @@
 - 카드 레어도/가격 단위 매입 중지 및 재개 추가
 - 매입 요청 거절 확인 / 거절 취소 흐름 추가
 - 통계 인기 매입 카드 TOP 10 / 20 / 50 / 전체 표시 전환 추가
+- 마일리지 지급 선택 시 추가 지급률 강조 표시 추가
 - 카드 수정 화면에서 게임 / 탭 변경 추가
 - `cards.game_id`, `cards.tab_id` 컬럼용 SQL 준비
 
@@ -284,7 +285,7 @@ tcg_trade_kiosk/
 
 ### 릴리스 문서
 
-- `release-notes/v0.1.0.md` ~ `release-notes/v0.5.9.md`
+- `release-notes/v0.1.0.md` ~ `release-notes/v0.6.0.md`
   - 형식과 어체 통일 완료
   - GitHub Releases 본문도 동일 기준으로 정리 완료
 
@@ -304,7 +305,7 @@ tcg_trade_kiosk/
 1. `components/global-admin-modal.tsx`
 2. `components/full-width-grid.tsx`
 3. `lib/use-orders.ts`
-4. 최신 릴리스 노트 `release-notes/v0.5.9.md`
+4. 최신 릴리스 노트 `release-notes/v0.6.0.md`
 5. `README.md`
 
 특히 관리자 기능을 손댈 때는 `global-admin-modal.tsx`와 `use-orders.ts`를 같이 읽어야 맥락이 맞습니다.
@@ -331,4 +332,4 @@ tcg_trade_kiosk/
 - GitHub 릴리스 제목도 동일하게 `vX.Y.Z`
 - 릴리스 노트와 실제 태그명을 맞추는 방식으로 유지
 
-현재 최신 커밋 흐름상, 문서와 릴리스 준비는 `v0.5.9` 기준으로 맞춰진 상태입니다.
+현재 최신 커밋 흐름상, 문서와 릴리스 준비는 `v0.6.0` 기준으로 맞춰진 상태입니다.
