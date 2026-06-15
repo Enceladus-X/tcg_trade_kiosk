@@ -37,6 +37,7 @@ tsconfig.tsbuildinfo
 # Debug logs
 pnpm-debug.log*
 npm-debug.log*
+.next-dev.log
 .devserver.out.log
 .devserver.err.log
 .devserver.log

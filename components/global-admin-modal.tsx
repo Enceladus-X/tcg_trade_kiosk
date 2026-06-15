@@ -84,6 +84,7 @@ const ORDER_STATUS_FILTERS: { key: OrderStatus | 'all'; label: string }[] = [
   { key: 'paid',     label: '지급완료' },
   { key: 'rejected', label: '거절됨' },
 ]
+const ORDER_PAGE_SIZE = 30
 
 const buildEmptyEnabled = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, false]))
 const buildEmptyPrices = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, 0]))
@@ -366,6 +367,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   // 매입 요청 필터
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all')
+  const [orderDisplayLimit, setOrderDisplayLimit] = useState(ORDER_PAGE_SIZE)
 
   // 가격/메모 조정 상태
   const [adjustedPrices, setAdjustedPrices] = useState<Record<string, Record<string, string>>>({})
@@ -375,6 +377,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [cancelingAdjustmentOrderId, setCancelingAdjustmentOrderId] = useState<string | null>(null)
   const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
   const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
+  const [expandedAuditOrders, setExpandedAuditOrders] = useState<Set<string>>(new Set())
   const [saveErrorByOrderId, setSaveErrorByOrderId] = useState<Record<string, string>>({})
   const [editingItem, setEditingItem] = useState<{ orderId: string; itemId: string; variant: 'base' | 'split' } | null>(null)
   const [editingValue, setEditingValue] = useState('')
@@ -1259,6 +1262,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       .filter(Boolean)
       .some((value) => value.toLowerCase().includes(query))
   }), [deferredOrderSearch, orderStatusFilter, orders])
+  const visibleOrders = useMemo(
+    () => filteredOrders.slice(0, orderDisplayLimit),
+    [filteredOrders, orderDisplayLimit]
+  )
+  const hasMoreOrders = visibleOrders.length < filteredOrders.length
+
+  useEffect(() => {
+    setOrderDisplayLimit(ORDER_PAGE_SIZE)
+  }, [deferredOrderSearch, orderStatusFilter])
 
   // 통계
   const today = new Date()
@@ -1603,6 +1615,19 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 />
               </div>
 
+              {filteredOrders.length > 0 && (
+                <div className="mb-3 flex items-center justify-between gap-3 text-xs text-zinc-500">
+                  <span>
+                    {filteredOrders.length.toLocaleString('ko-KR')}건 중 {visibleOrders.length.toLocaleString('ko-KR')}건 표시
+                  </span>
+                  {hasMoreOrders && (
+                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-zinc-400">
+                      아래에서 더 보기 가능
+                    </span>
+                  )}
+                </div>
+              )}
+
               {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
@@ -1612,7 +1637,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredOrders.map((order) => {
+                  {visibleOrders.map((order) => {
                     const status = statusConfig[order.status]
                     const isExpanded = expandedOrder === order.id
                     const priceArr = adjustedPrices[order.id]
@@ -1642,6 +1667,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const splitsChanged = splitArr ? Object.keys(splitArr).length > 0 : false
                     const hasChanges = pricesChanged || quantitiesChanged || notesChanged || paymentMethodsChanged || splitsChanged
                     const orderAuditEntries = priceAdjustmentsByOrderId[order.id] ?? []
+                    const auditExpanded = expandedAuditOrders.has(order.id)
+                    const visibleAuditEntries = auditExpanded ? orderAuditEntries : orderAuditEntries.slice(0, 3)
+                    const hiddenAuditCount = orderAuditEntries.length - visibleAuditEntries.length
                     const isAdjusted = adjustedOrderIds.has(order.id) || orderAuditEntries.length > 0
                     const orderGameBadges = getOrderGameBadges(order)
                     const effectiveOrderPaymentMethod = deriveOrderPaymentMethod(
@@ -2107,29 +2135,54 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                             {orderAuditEntries.length > 0 && (
                               <div className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                                    <Scissors className="h-3.5 w-3.5 text-sky-400" />
-                                    가격 조정 이력
+                                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-400">
+                                    <span className="inline-flex items-center gap-2">
+                                      <Scissors className="h-3.5 w-3.5 text-sky-400" />
+                                      가격 조정 이력
+                                    </span>
+                                    <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-300">
+                                      총 {orderAuditEntries.length}건
+                                    </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleCancelPriceAdjustments(order, orderAuditEntries)
-                                    }}
-                                    disabled={cancelingAdjustmentOrderId === order.id}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-200 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    {cancelingAdjustmentOrderId === order.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <X className="h-3 w-3" />
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    {orderAuditEntries.length > 3 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setExpandedAuditOrders(prev => {
+                                            const next = new Set(prev)
+                                            if (next.has(order.id)) next.delete(order.id)
+                                            else next.add(order.id)
+                                            return next
+                                          })
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-bold text-zinc-300 transition-colors hover:border-zinc-600 hover:bg-zinc-800 hover:text-white"
+                                      >
+                                        {auditExpanded ? '접기' : `전체 ${orderAuditEntries.length}건 보기`}
+                                        {auditExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                      </button>
                                     )}
-                                    가격 조정 취소
-                                  </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleCancelPriceAdjustments(order, orderAuditEntries)
+                                      }}
+                                      disabled={cancelingAdjustmentOrderId === order.id}
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-200 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {cancelingAdjustmentOrderId === order.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <X className="h-3 w-3" />
+                                      )}
+                                      가격 조정 취소
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="space-y-2">
-                                  {orderAuditEntries.slice(0, 6).map((entry) => (
+                                  {visibleAuditEntries.map((entry) => (
                                     <div key={entry.id} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
@@ -2146,6 +2199,18 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                       </div>
                                     </div>
                                   ))}
+                                  {hiddenAuditCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setExpandedAuditOrders(prev => new Set(prev).add(order.id))
+                                      }}
+                                      className="w-full rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs font-semibold text-zinc-400 transition-colors hover:border-sky-500/50 hover:text-sky-300"
+                                    >
+                                      숨긴 이력 {hiddenAuditCount}건 더 보기
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -2190,6 +2255,15 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                       </div>
                     )
                   })}
+                  {hasMoreOrders && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderDisplayLimit((limit) => limit + ORDER_PAGE_SIZE)}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-800/70 px-4 py-3 text-sm font-semibold text-zinc-300 transition-colors hover:border-amber-500/50 hover:bg-zinc-800 hover:text-white"
+                    >
+                      매입 요청 {Math.min(ORDER_PAGE_SIZE, filteredOrders.length - visibleOrders.length).toLocaleString('ko-KR')}건 더 보기
+                    </button>
+                  )}
                 </div>
               )}
             </div>
