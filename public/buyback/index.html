@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://*.supabase.co; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" />
+  <meta name="referrer" content="no-referrer" />
+  <title>마린포드 웹 매입몰</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script defer src="./data.js"></script>
+  <script defer src="./script.js"></script>
+</head>
+<body>
+  <header class="market-header">
+    <a class="brand-lockup" href="#" aria-label="마린포드 웹 매입몰 홈">
+      <span class="brand-mark">M</span>
+      <span>
+        <strong>마린포드 매입몰</strong>
+        <small>TCG buyback marketplace</small>
+      </span>
+    </a>
+
+    <label class="market-search">
+      <span>카드 검색</span>
+      <input id="searchInput" type="search" placeholder="카드명, 코드, 확장팩을 검색하세요" />
+      <button type="button" id="searchButton" aria-label="검색">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10.8 4.5a6.3 6.3 0 1 1 0 12.6 6.3 6.3 0 0 1 0-12.6Zm0 2a4.3 4.3 0 1 0 0 8.6 4.3 4.3 0 0 0 0-8.6Zm4.9 9 3.8 3.8-1.4 1.4-3.8-3.8 1.4-1.4Z" />
+        </svg>
+      </button>
+    </label>
+
+    <div class="header-actions">
+      <div class="sync-chip" id="dataStatus" data-status="snapshot">
+        <span></span>
+        <b>스냅샷 데이터</b>
+      </div>
+      <button class="admin-button" id="openAdmin" type="button">관리자</button>
+    </div>
+  </header>
+
+  <main class="market-shell">
+    <section class="game-strip" id="gameStrip" aria-label="게임 선택"></section>
+
+    <section class="market-layout">
+      <section class="catalog-area">
+        <div class="catalog-toolbar">
+          <div class="toolbar-controls">
+            <label class="set-picker">
+              <span>확장팩</span>
+              <select id="setSelect"></select>
+            </label>
+            <div class="rarity-picker">
+              <span>레어도</span>
+              <div class="rarity-chips" id="rarityChips" aria-label="레어도 필터"></div>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <span class="result-count" id="resultCount">0장</span>
+            <div class="sort-segments" id="sortButtons" aria-label="정렬">
+              <button class="active" type="button" data-sort="recent">최근순</button>
+              <button type="button" data-sort="price-asc">가격↑</button>
+              <button type="button" data-sort="price-desc">가격↓</button>
+              <button type="button" data-sort="name">이름순</button>
+            </div>
+            <label class="sr-only">
+              정렬
+              <select id="sortSelect">
+                <option value="recent">최근순</option>
+                <option value="price-asc">가격↑</option>
+                <option value="price-desc">가격↓</option>
+                <option value="name">이름순</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="card-grid" id="cardGrid"></div>
+      </section>
+
+      <aside class="cart-panel" id="cartPanel" aria-label="매입 목록">
+        <div class="cart-head">
+          <div>
+            <span>매입 목록</span>
+            <strong id="cartCount">0종 / 0장</strong>
+          </div>
+          <button id="clearCart" type="button">전체 삭제</button>
+        </div>
+        <div class="cart-items" id="cartItems">
+          <div class="empty-cart">카드를 선택하면 매입 목록에 담깁니다.</div>
+        </div>
+        <div class="payout-box">
+          <span>지급 방식</span>
+          <div class="payout-toggle" id="globalPayout">
+            <button class="active" type="button" data-method="cash">현금</button>
+            <button type="button" data-method="mileage">마일리지 <b>+10%</b></button>
+          </div>
+        </div>
+        <div class="total-box">
+          <span>예상 지급액</span>
+          <strong id="cartTotal">0원</strong>
+        </div>
+        <button class="checkout-button" id="openCheckout" type="button">매입 신청하기</button>
+      </aside>
+    </section>
+  </main>
+
+  <button class="mobile-cart-button" id="mobileCartButton" type="button" aria-controls="cartPanel" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 6.5 8.3 3h7.4L17 6.5h3v2h-1.1l-1.2 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5.1 8.5H4v-2h3Zm3.4-1.5-.6 1.5h4.4L13.6 5h-3.2Zm-3.2 3.5 1.1 9.9h7.4l1.1-9.9H7.2Zm3.1 2.1v5.9h-1.8v-5.9h1.8Zm5.2 0v5.9h-1.8v-5.9h1.8Z" />
+    </svg>
+    <span>매입 목록</span>
+    <strong id="mobileCartTotal">0원</strong>
+  </button>
+
+  <div class="overlay" id="detailOverlay" aria-hidden="true">
+    <section class="detail-modal" role="dialog" aria-modal="true" aria-label="카드 상세">
+      <button class="icon-button detail-close" id="closeDetail" type="button" aria-label="상세 닫기">×</button>
+      <div class="detail-art" id="detailArt"></div>
+      <div class="detail-content">
+        <span class="detail-code" id="detailCode"></span>
+        <h2 id="detailName"></h2>
+        <p id="detailSet"></p>
+        <div class="price-options" id="priceOptions"></div>
+        <div class="quantity-row">
+          <button id="qtyMinus" type="button">−</button>
+          <strong id="quantityValue">1</strong>
+          <button id="qtyPlus" type="button">+</button>
+        </div>
+        <button class="add-button" id="addToCart" type="button">매입 목록에 추가</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="overlay" id="checkoutOverlay" aria-hidden="true">
+    <section class="checkout-modal" role="dialog" aria-modal="true" aria-label="매입 신청">
+      <div class="modal-head">
+        <div>
+          <span>최종 접수</span>
+          <strong>고객 정보 입력</strong>
+        </div>
+        <button class="icon-button" id="closeCheckout" type="button" aria-label="접수 닫기">×</button>
+      </div>
+      <div class="checkout-summary">
+        <span>예상 지급액</span>
+        <strong id="checkoutTotal">0원</strong>
+      </div>
+      <div class="form-grid">
+        <label>
+          <span>이름</span>
+          <input id="customerName" name="customerName" type="text" placeholder="홍길동" autocomplete="name" required />
+        </label>
+        <label>
+          <span>연락처</span>
+          <input id="customerPhone" name="customerPhone" type="tel" placeholder="010-0000-0000" autocomplete="tel" inputmode="tel" pattern="[0-9\-\s]{9,14}" required />
+        </label>
+        <label>
+          <span>은행</span>
+          <input id="bankName" name="bankName" type="text" placeholder="국민은행" autocomplete="off" required />
+        </label>
+        <label>
+          <span>계좌번호</span>
+          <input id="accountNumber" name="accountNumber" type="text" placeholder="000000-00-000000" autocomplete="off" inputmode="numeric" pattern="[0-9\-\s]{6,24}" required />
+        </label>
+      </div>
+      <p class="form-error" id="checkoutError" role="alert" hidden></p>
+      <button class="submit-button" id="submitCheckout" type="button">매입 신청 접수</button>
+      <p class="checkout-note">실제 서비스에서는 신청 후 접수번호와 처리 상태를 안내합니다.</p>
+    </section>
+  </div>
+
+  <div class="overlay admin-overlay" id="adminOverlay" aria-hidden="true">
+    <section class="admin-modal" role="dialog" aria-modal="true" aria-label="관리자 대시보드">
+      <div class="admin-head">
+        <div>
+          <span>STORE BACKOFFICE</span>
+          <strong>관리자 대시보드</strong>
+        </div>
+        <button class="icon-button" id="closeAdmin" type="button" aria-label="관리자 닫기">×</button>
+      </div>
+
+      <div class="admin-kpis">
+        <article>
+          <span>오늘 접수</span>
+          <strong>27건</strong>
+          <em>대기 4건</em>
+        </article>
+        <article>
+          <span>예상 지급액</span>
+          <strong>472,640원</strong>
+          <em>마일리지 25장</em>
+        </article>
+        <article>
+          <span>주의 카드</span>
+          <strong>8종</strong>
+          <em>가격 급등 / 매입 중지</em>
+        </article>
+        <article>
+          <span>이번 주 TOP</span>
+          <strong>유희왕</strong>
+          <em>전체 매입의 63%</em>
+        </article>
+      </div>
+
+      <div class="admin-grid">
+        <section class="admin-card admin-wide">
+          <div class="admin-card-head">
+            <div>
+              <span>매입 요청 큐</span>
+              <strong>검수와 정산을 빠르게 처리</strong>
+            </div>
+            <button type="button">전체 승인</button>
+          </div>
+          <div class="admin-order-list">
+            <article>
+              <b>김정월</b>
+              <span>유희왕 4장 · 현금 · 58,500원</span>
+              <div>
+                <button type="button">검수</button>
+                <button type="button">가격조정</button>
+                <button type="button">거절</button>
+              </div>
+            </article>
+            <article>
+              <b>이지훈</b>
+              <span>원피스 / 유희왕 9장 · 마일리지 · 181,500원</span>
+              <div>
+                <button type="button">검수</button>
+                <button type="button">분류</button>
+                <button type="button">보류</button>
+              </div>
+            </article>
+            <article>
+              <b>현장 접수</b>
+              <span>디지몬 12장 · 혼합 정산 · 76,200원</span>
+              <div>
+                <button type="button">검수</button>
+                <button type="button">영수증</button>
+                <button type="button">완료</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <span>카드 / 가격 관리</span>
+              <strong>레어도별 일괄 수정</strong>
+            </div>
+          </div>
+          <div class="admin-price-table">
+            <div><b>도미나스 임펄스</b><span>OFUR</span><em>45,000원</em></div>
+            <div><b>로기어스텔라티폰</b><span>SE</span><em>1,200원</em></div>
+            <div><b>사천의용스타브베놈</b><span>UR</span><em>400원</em></div>
+          </div>
+          <button class="admin-primary" type="button">CSV / 시트로 일괄 편집</button>
+        </section>
+
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <span>매입 중지 규칙</span>
+              <strong>손실 방지 자동화</strong>
+            </div>
+          </div>
+          <ul class="admin-checklist">
+            <li>매입가 0원 또는 미등록 레어도 자동 숨김</li>
+            <li>고가 카드 30,000원 이상 검수 2단계</li>
+            <li>특정 카드 / 확장팩 / 레어도 매입 중지</li>
+          </ul>
+        </section>
+
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <span>운영 통계</span>
+              <strong>매입 흐름 확인</strong>
+            </div>
+          </div>
+          <div class="admin-bars">
+            <div style="--bar: 63%"><span>유희왕</span><b></b><em>63%</em></div>
+            <div style="--bar: 28%"><span>원피스</span><b></b><em>28%</em></div>
+            <div style="--bar: 9%"><span>기타</span><b></b><em>9%</em></div>
+          </div>
+        </section>
+
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <span>정산 / 출력</span>
+              <strong>현장 처리용 도구</strong>
+            </div>
+          </div>
+          <ul class="admin-checklist">
+            <li>견적서 / 영수증 출력</li>
+            <li>입금자 정보 복사</li>
+            <li>마일리지 배율 표시</li>
+          </ul>
+        </section>
+
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <span>환경 설정</span>
+              <strong>매장 정책 관리</strong>
+            </div>
+          </div>
+          <ul class="admin-checklist">
+            <li>마일리지 판촉 배율</li>
+            <li>게임 / 확장팩 / 레어도 관리</li>
+            <li>관리자 권한과 접속 로그</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

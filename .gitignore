@@ -41,3 +41,6 @@ npm-debug.log*
 .devserver.out.log
 .devserver.err.log
 .devserver.log
+
+# Public web buyback runtime config (contains deploy-specific anon key)
+public/buyback/runtime-config.json
