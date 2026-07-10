@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#000000" />
   <meta name="description" content="마린포드 카드 매입 사전견적. 카드별 매입가를 확인하고 방문 전 견적을 접수하세요." />
   <title>마린포드 웹 사전견적</title>
-  <link rel="stylesheet" href="./styles.css?v=marketplace-2" />
+  <link rel="stylesheet" href="./styles.css?v=marketplace-3" />
   <script defer src="./data.js"></script>
   <script defer src="./script.js"></script>
 </head>
@@ -148,16 +148,19 @@
         <h2 id="detailName"></h2>
         <p id="detailSet"></p>
         <div class="price-options" id="priceOptions"></div>
-        <section class="condition-panel" aria-labelledby="conditionTitle">
-          <div class="condition-head">
-            <div>
-              <strong id="conditionTitle">현재 카드 상태</strong>
-              <span>가장 가까운 상태를 선택해 예상 범위를 확인하세요.</span>
-            </div>
-            <b>자가진단</b>
+        <section class="condition-panel" id="conditionPanel" aria-labelledby="conditionTitle">
+          <button class="condition-summary" id="conditionToggle" type="button" aria-expanded="false" aria-controls="conditionDetails">
+            <span>
+              <strong id="conditionTitle">카드 상태 선택</strong>
+              <small id="conditionSummaryText">아직 선택하지 않음</small>
+            </span>
+            <b id="conditionAction">선택</b>
+          </button>
+          <div class="condition-details" id="conditionDetails" hidden>
+            <p>실물과 가장 가까운 상태를 선택해 주세요.</p>
+            <div class="condition-options" id="conditionOptions"></div>
+            <p class="condition-estimate" id="conditionEstimate" aria-live="polite"></p>
           </div>
-          <div class="condition-options" id="conditionOptions"></div>
-          <p class="condition-estimate" id="conditionEstimate"></p>
         </section>
         <div class="quantity-row">
           <button id="qtyMinus" type="button">−</button>

@@ -2145,29 +2145,48 @@ body {
 }
 
 .price-ladder {
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-top: 1px solid #e6ebf2;
+  padding-top: 4px;
 }
 
 .rarity-price {
-  min-height: 34px;
-  border-radius: 8px;
+  display: flex !important;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  padding: 3px 1px;
+  background: transparent;
   box-shadow: none;
 }
 
+.rarity-price + .rarity-price {
+  border-top: 1px solid #f0f3f7;
+}
+
 .rarity-price b {
-  min-width: 44px;
-  min-height: 26px;
-  border-radius: 6px;
+  min-width: 38px;
+  min-height: 21px;
+  border: 1px solid var(--rarity-border);
+  border-radius: 5px;
+  color: var(--rarity-text);
+  background: var(--rarity-bg);
+  font-size: 10px;
+  text-shadow: none;
   box-shadow: none;
 }
 
 .rarity-price em {
-  min-height: 26px;
-  border-radius: 6px;
-  padding: 0 7px;
-  color: var(--rarity-text);
-  background: rgba(255, 255, 255, 0.8);
-  font-size: 15px;
+  min-height: 21px;
+  border-radius: 0;
+  padding: 0;
+  color: var(--brand-navy);
+  background: transparent;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
   text-shadow: none;
   box-shadow: none;
 }
@@ -2272,18 +2291,51 @@ body {
   color: var(--brand-navy);
 }
 
+.price-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 2px 0;
+}
+
 .price-options button {
-  border-radius: 10px;
+  display: inline-flex;
+  gap: 9px;
+  min-height: 44px;
+  border: 1px solid #d8e0ea;
+  border-radius: 9px;
+  padding: 5px 12px 5px 6px;
+  color: var(--brand-navy);
+  background: #fff;
   box-shadow: none;
 }
 
 .price-options button.active {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  border-color: #2563eb;
+  background: #f7faff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
 }
 
-.price-options button b,
+.price-options button b {
+  min-width: 40px;
+  min-height: 28px;
+  border: 1px solid var(--rarity-border);
+  border-radius: 6px;
+  color: var(--rarity-text);
+  background: var(--rarity-bg);
+  font-size: 11px;
+  text-shadow: none;
+}
+
 .price-options button span {
-  border-radius: 7px;
+  min-height: 28px;
+  border-radius: 0;
+  padding: 0;
+  color: var(--brand-navy);
+  background: transparent;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
 }
 
 .quantity-row {
@@ -2527,65 +2579,111 @@ button:active {
 }
 
 .condition-panel {
-  display: grid;
-  gap: 10px;
   border: 1px solid #dbe4ef;
-  border-radius: 12px;
-  padding: 13px;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.condition-panel[data-expanded="true"] {
+  border-color: #93b4e8;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.08);
+}
+
+.condition-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  padding: 8px 11px 8px 13px;
+  color: #172033;
+  background: transparent;
+  text-align: left;
+}
+
+.condition-summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.condition-summary strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.condition-summary small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.condition-summary b {
+  flex: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 10px;
+}
+
+.condition-summary::after {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: -3px;
+  border-right: 1.5px solid #64748b;
+  border-bottom: 1.5px solid #64748b;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.condition-panel[data-expanded="true"] .condition-summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.condition-details {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e6ebf2;
+  padding: 10px 11px 11px;
   background: #f8fafc;
 }
 
-.condition-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
+.condition-details[hidden] {
+  display: none;
 }
 
-.condition-head strong,
-.condition-head span {
-  display: block;
-}
-
-.condition-head strong {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.condition-head span {
-  margin-top: 2px;
+.condition-details > p:first-child {
+  margin: 0;
   color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.condition-head b {
-  flex: none;
-  border-radius: 999px;
-  padding: 4px 8px;
-  color: #1d4ed8;
-  background: #dbeafe;
   font-size: 10px;
-  letter-spacing: 0.04em;
+  font-weight: 750;
 }
 
 .condition-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .condition-options button {
-  display: grid;
-  gap: 2px;
+  display: block;
   min-width: 0;
   border: 1px solid #d7dee9;
-  border-radius: 9px;
-  padding: 9px 10px;
+  border-radius: 7px;
+  padding: 8px 6px;
   color: #334155;
   background: white;
-  text-align: left;
+  text-align: center;
 }
 
 .condition-options button strong {
@@ -2594,26 +2692,22 @@ button:active {
 }
 
 .condition-options button span {
-  overflow: hidden;
-  color: #7c8799;
-  font-size: 10px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .condition-options button.active {
   border-color: #2563eb;
   color: #1d4ed8;
   background: #eff6ff;
-  box-shadow: inset 3px 0 0 #2563eb;
+  box-shadow: inset 0 -2px 0 #2563eb;
 }
 
 .condition-estimate {
   border-top: 1px dashed #cbd5e1;
-  padding-top: 9px;
+  margin: 0;
+  padding-top: 8px;
   color: #0f766e !important;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900 !important;
 }
 
@@ -2729,7 +2823,7 @@ button:active {
 
 @media (max-width: 640px) {
   .condition-options {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .quote-result-head {

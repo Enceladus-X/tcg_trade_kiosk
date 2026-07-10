@@ -135,7 +135,8 @@ const state = {
   search: '',
   selectedCard: null,
   selectedRarity: null,
-  selectedCondition: 'near_mint',
+  selectedCondition: null,
+  conditionExpanded: false,
   quantity: 1,
   cart: [],
   payout: 'cash',
@@ -166,7 +167,7 @@ function formatPrice(value) {
 }
 
 function getCondition(conditionId) {
-  return CONDITION_OPTIONS.find((condition) => condition.id === conditionId) ?? CONDITION_OPTIONS[0]
+  return CONDITION_OPTIONS.find((condition) => condition.id === conditionId) ?? null
 }
 
 function roundEstimate(value) {
@@ -174,7 +175,7 @@ function roundEstimate(value) {
 }
 
 function getItemEstimateRange(item) {
-  const condition = getCondition(item.declaredCondition)
+  const condition = getCondition(item.declaredCondition) ?? CONDITION_OPTIONS[0]
   const quantity = Number(item.quantity ?? 1)
   let minimum = roundEstimate(Number(item.price) * condition.minRate) * quantity
   let maximum = roundEstimate(Number(item.price) * condition.maxRate) * quantity
@@ -845,7 +846,7 @@ function renderCart() {
       <div>
         <strong>${escapeHtml(item.name)}</strong>
         <span><i class="cart-rarity" style="${escapeHtml(rarityStyle(item.rarity))}">${escapeHtml(item.rarity)}</i> x${item.quantity} · 기준 ${formatPrice(item.price)}</span>
-        <small class="cart-condition">자가진단 · ${escapeHtml(getCondition(item.declaredCondition).label)}</small>
+        <small class="cart-condition">자가진단 · ${escapeHtml((getCondition(item.declaredCondition) ?? CONDITION_OPTIONS[0]).label)}</small>
       </div>
       <div>
         <b>${formatPriceRange(itemEstimate)}</b>
@@ -918,7 +919,8 @@ function openDetail(cardId) {
 
   state.selectedCard = card
   state.selectedRarity = Object.keys(card.prices)[0]
-  state.selectedCondition = 'near_mint'
+  state.selectedCondition = null
+  state.conditionExpanded = false
   state.quantity = 1
 
   $('#detailArt').style.setProperty('--card-bg', safeCssColor(card.color))
@@ -945,10 +947,22 @@ function renderPriceOptions() {
 }
 
 function renderConditionOptions() {
+  const panel = $('#conditionPanel')
+  const toggle = $('#conditionToggle')
+  const details = $('#conditionDetails')
   const container = $('#conditionOptions')
   const estimate = $('#conditionEstimate')
+  const summary = $('#conditionSummaryText')
+  const action = $('#conditionAction')
   const card = state.selectedCard
-  if (!container || !estimate || !card || !state.selectedRarity) return
+  if (!panel || !toggle || !details || !container || !estimate || !summary || !action || !card || !state.selectedRarity) return
+
+  const condition = getCondition(state.selectedCondition)
+  panel.dataset.expanded = String(state.conditionExpanded)
+  panel.dataset.selected = String(Boolean(condition))
+  toggle.setAttribute('aria-expanded', String(state.conditionExpanded))
+  details.hidden = !state.conditionExpanded
+  action.textContent = condition ? '변경' : '선택'
 
   container.innerHTML = CONDITION_OPTIONS.map((condition) => `
     <button
@@ -961,11 +975,19 @@ function renderConditionOptions() {
     </button>
   `).join('')
 
-  const condition = getCondition(state.selectedCondition)
+  if (!condition) {
+    summary.textContent = '아직 선택하지 않음'
+    estimate.textContent = ''
+    estimate.hidden = true
+    return
+  }
+
   const basePrice = Number(card.prices[state.selectedRarity] ?? 0)
   const minimum = roundEstimate(basePrice * condition.minRate)
   const maximum = roundEstimate(basePrice * condition.maxRate)
-  estimate.textContent = `자가진단 예상 범위 ${formatPrice(minimum)} ~ ${formatPrice(maximum)} · 실물 검수 후 확정`
+  summary.textContent = `${condition.label} · ${formatPrice(minimum)}~${formatPrice(maximum)}`
+  estimate.textContent = `예상 범위 ${formatPrice(minimum)}~${formatPrice(maximum)} · 실물 검수 후 확정`
+  estimate.hidden = false
 }
 
 function addSelectedToCart() {
@@ -973,7 +995,15 @@ function addSelectedToCart() {
   const rarity = state.selectedRarity
   if (!card || !rarity) return
 
-  const declaredCondition = getCondition(state.selectedCondition).id
+  const selectedCondition = getCondition(state.selectedCondition)
+  if (!selectedCondition) {
+    state.conditionExpanded = true
+    renderConditionOptions()
+    $('#conditionToggle')?.focus()
+    showToast('카드 상태를 먼저 선택해 주세요.')
+    return
+  }
+  const declaredCondition = selectedCondition.id
 
   const existing = state.cart.find((item) => (
     item.id === card.id &&
@@ -1040,6 +1070,14 @@ document.addEventListener('click', (event) => {
   const conditionButton = event.target.closest('[data-condition]')
   if (conditionButton) {
     state.selectedCondition = conditionButton.dataset.condition
+    state.conditionExpanded = false
+    renderConditionOptions()
+    return
+  }
+
+  const conditionToggle = event.target.closest('#conditionToggle')
+  if (conditionToggle) {
+    state.conditionExpanded = !state.conditionExpanded
     renderConditionOptions()
     return
   }
