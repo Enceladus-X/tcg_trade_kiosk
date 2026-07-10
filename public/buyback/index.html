@@ -5,12 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://*.supabase.co; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" />
   <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="마린포드 카드 매입 사전견적. 카드별 매입가를 확인하고 방문 전 견적을 접수하세요." />
   <title>마린포드 웹 사전견적</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=monochrome-2" />
   <script defer src="./data.js"></script>
   <script defer src="./script.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#catalog">카드 목록으로 이동</a>
   <header class="market-header">
     <a class="brand-lockup" href="#" aria-label="마린포드 웹 사전견적 홈">
       <span class="brand-mark">M</span>
@@ -62,7 +65,7 @@
     </section>
 
     <section class="market-layout">
-      <section class="catalog-area">
+      <section class="catalog-area" id="catalog" tabindex="-1">
         <div class="catalog-toolbar">
           <div class="toolbar-controls">
             <label class="set-picker">
