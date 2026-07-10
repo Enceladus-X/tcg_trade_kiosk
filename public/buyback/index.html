@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://*.supabase.co; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" />
   <meta name="referrer" content="no-referrer" />
-  <title>마린포드 웹 매입몰</title>
+  <title>마린포드 웹 사전견적</title>
   <link rel="stylesheet" href="./styles.css" />
   <script defer src="./data.js"></script>
   <script defer src="./script.js"></script>
 </head>
 <body>
   <header class="market-header">
-    <a class="brand-lockup" href="#" aria-label="마린포드 웹 매입몰 홈">
+    <a class="brand-lockup" href="#" aria-label="마린포드 웹 사전견적 홈">
       <span class="brand-mark">M</span>
       <span>
-        <strong>마린포드 매입몰</strong>
-        <small>TCG buyback marketplace</small>
+        <strong>마린포드 사전견적</strong>
+        <small>Web buyback quote</small>
       </span>
     </a>
 
@@ -41,6 +41,25 @@
 
   <main class="market-shell">
     <section class="game-strip" id="gameStrip" aria-label="게임 선택"></section>
+
+    <section class="quote-lookup" aria-label="사전 견적 조회">
+      <div>
+        <strong>웹 접수는 사전 견적입니다</strong>
+        <span>매장 검수 후 최종 매입가가 확정됩니다.</span>
+      </div>
+      <form class="quote-lookup-form" id="quoteLookupForm">
+        <label>
+          <span>접수번호</span>
+          <input id="quoteCodeInput" type="text" placeholder="MW-260710-A1B2" autocomplete="off" />
+        </label>
+        <label>
+          <span>연락처 끝 4자리</span>
+          <input id="quotePhoneInput" type="text" placeholder="0000" inputmode="numeric" maxlength="4" autocomplete="off" />
+        </label>
+        <button id="lookupQuote" type="submit">상태 조회</button>
+      </form>
+      <p class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></p>
+    </section>
 
     <section class="market-layout">
       <section class="catalog-area">
@@ -78,16 +97,16 @@
         <div class="card-grid" id="cardGrid"></div>
       </section>
 
-      <aside class="cart-panel" id="cartPanel" aria-label="매입 목록">
+      <aside class="cart-panel" id="cartPanel" aria-label="사전 견적 목록">
         <div class="cart-head">
           <div>
-            <span>매입 목록</span>
+            <span>사전 견적 목록</span>
             <strong id="cartCount">0종 / 0장</strong>
           </div>
           <button id="clearCart" type="button">전체 삭제</button>
         </div>
         <div class="cart-items" id="cartItems">
-          <div class="empty-cart">카드를 선택하면 매입 목록에 담깁니다.</div>
+          <div class="empty-cart">카드를 선택하면 사전 견적에 담깁니다.</div>
         </div>
         <div class="payout-box">
           <span>지급 방식</span>
@@ -100,7 +119,7 @@
           <span>예상 지급액</span>
           <strong id="cartTotal">0원</strong>
         </div>
-        <button class="checkout-button" id="openCheckout" type="button">매입 신청하기</button>
+        <button class="checkout-button" id="openCheckout" type="button">사전 견적 접수</button>
       </aside>
     </section>
   </main>
@@ -109,7 +128,7 @@
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M7 6.5 8.3 3h7.4L17 6.5h3v2h-1.1l-1.2 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5.1 8.5H4v-2h3Zm3.4-1.5-.6 1.5h4.4L13.6 5h-3.2Zm-3.2 3.5 1.1 9.9h7.4l1.1-9.9H7.2Zm3.1 2.1v5.9h-1.8v-5.9h1.8Zm5.2 0v5.9h-1.8v-5.9h1.8Z" />
     </svg>
-    <span>매입 목록</span>
+    <span>견적 목록</span>
     <strong id="mobileCartTotal">0원</strong>
   </button>
 
@@ -127,17 +146,17 @@
           <strong id="quantityValue">1</strong>
           <button id="qtyPlus" type="button">+</button>
         </div>
-        <button class="add-button" id="addToCart" type="button">매입 목록에 추가</button>
+        <button class="add-button" id="addToCart" type="button">견적 목록에 추가</button>
       </div>
     </section>
   </div>
 
   <div class="overlay" id="checkoutOverlay" aria-hidden="true">
-    <section class="checkout-modal" role="dialog" aria-modal="true" aria-label="매입 신청">
+    <section class="checkout-modal" role="dialog" aria-modal="true" aria-label="사전 견적 접수">
       <div class="modal-head">
         <div>
-          <span>최종 접수</span>
-          <strong>고객 정보 입력</strong>
+          <span>사전 견적 접수</span>
+          <strong>방문 전 정보를 남겨주세요</strong>
         </div>
         <button class="icon-button" id="closeCheckout" type="button" aria-label="접수 닫기">×</button>
       </div>
@@ -164,8 +183,8 @@
         </label>
       </div>
       <p class="form-error" id="checkoutError" role="alert" hidden></p>
-      <button class="submit-button" id="submitCheckout" type="button">매입 신청 접수</button>
-      <p class="checkout-note">실제 서비스에서는 신청 후 접수번호와 처리 상태를 안내합니다.</p>
+      <button class="submit-button" id="submitCheckout" type="button">사전 견적 접수</button>
+      <p class="checkout-note">접수번호를 보관해 주세요. 매장 검수 후 최종 매입가와 지급 방식이 확정됩니다.</p>
     </section>
   </div>
 

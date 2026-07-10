@@ -50,6 +50,8 @@ export type OrderStatus = 'pending' | 'approved' | 'paid' | 'rejected'
 export interface PendingOrder {
   id: string
   createdAt: string
+  channel?: 'kiosk' | 'web' | string | null
+  webQuoteCode?: string | null
   customerName: string
   bankName: string
   accountNumber: string

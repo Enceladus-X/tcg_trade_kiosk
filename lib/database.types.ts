@@ -43,6 +43,8 @@ export type DbOrder = {
   status: OrderStatus
   payment_method: OrderPaymentMethod
   mileage_rate: number | null
+  channel?: string | null
+  web_quote_code?: string | null
   order_items?: DbOrderItem[]
 }
 

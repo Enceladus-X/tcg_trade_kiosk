@@ -1204,6 +1204,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         <h1>마린포드 ${title}</h1>
         <div class="meta">${statusLabel} 일시: ${formatDate(order.createdAt)}</div>
         <div class="box">
+          ${order.webQuoteCode ? `<div>웹 접수번호: ${order.webQuoteCode}</div>` : ''}
+          ${order.channel === 'web' ? '<div>접수채널: 웹 사전견적</div>' : ''}
           <div>고객명: ${order.customerName}</div>
           <div>연락처: ${order.phoneNumber}</div>
           <div>계좌: ${order.bankName} ${order.accountNumber}</div>
@@ -1257,6 +1259,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       order.phoneNumber,
       order.accountNumber,
       order.bankName,
+      order.webQuoteCode ?? '',
+      order.channel === 'web' ? '웹 사전견적' : '',
       ...order.items.flatMap((item) => [item.cardName, item.cardCode, item.note ?? '']),
     ]
       .filter(Boolean)
@@ -1610,7 +1614,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   type="text"
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="고객명, 연락처, 계좌번호, 카드명으로 검색..."
+                  placeholder="고객명, 접수번호, 연락처, 계좌번호, 카드명으로 검색..."
                   className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 focus:outline-none"
                 />
               </div>
@@ -1672,6 +1676,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const hiddenAuditCount = orderAuditEntries.length - visibleAuditEntries.length
                     const isAdjusted = adjustedOrderIds.has(order.id) || orderAuditEntries.length > 0
                     const orderGameBadges = getOrderGameBadges(order)
+                    const isWebOrder = order.channel === 'web' || Boolean(order.webQuoteCode)
                     const effectiveOrderPaymentMethod = deriveOrderPaymentMethod(
                       order.items.map((item) => ({
                         paymentMethod: paymentMethodArr?.[item.itemId!] ?? item.paymentMethod,
@@ -1734,6 +1739,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}>
                                   {status.icon}{status.label}
                                 </span>
+                                {isWebOrder && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-bold text-sky-300 ring-1 ring-sky-400/25">
+                                    <FileText className="h-3 w-3" />웹 사전견적
+                                  </span>
+                                )}
+                                {order.webQuoteCode && (
+                                  <span className="inline-flex items-center rounded-full bg-zinc-700 px-2 py-0.5 text-xs font-black tracking-wide text-zinc-200">
+                                    {order.webQuoteCode}
+                                  </span>
+                                )}
                                 {isAdjusted && (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-400">
                                     <Scissors className="h-3 w-3" />가격조정됨

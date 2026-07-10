@@ -592,7 +592,8 @@ function resetCheckoutForm() {
 
 async function submitCheckoutOrder() {
   if (!runtimeConfig.submitOrders || !hasSupabaseConfig()) {
-    return { id: createReceiptId(), remote: false }
+    const localId = createReceiptId()
+    return { id: localId, quoteCode: localId, remote: false }
   }
 
   const fields = getCheckoutFieldValues()
@@ -615,9 +616,77 @@ async function submitCheckoutOrder() {
     body: JSON.stringify(payload),
   })
 
+  const receipt = Array.isArray(result) ? result[0] : result
+
   return {
-    id: Array.isArray(result) ? result[0] : result,
+    id: receipt?.quote_code ?? receipt?.order_id ?? receipt?.id ?? createReceiptId(),
+    orderId: receipt?.order_id ?? null,
+    quoteCode: receipt?.quote_code ?? receipt?.id ?? null,
+    status: receipt?.status ?? 'pending',
     remote: true,
+  }
+}
+
+function setQuoteLookupResult(message, status = 'info') {
+  const result = $('#quoteLookupResult')
+  if (!result) return
+  result.textContent = message
+  result.dataset.status = status
+  result.classList.toggle('show', Boolean(message))
+}
+
+async function lookupQuoteStatus() {
+  const code = $('#quoteCodeInput')?.value.trim().toUpperCase() ?? ''
+  const phoneLast4 = ($('#quotePhoneInput')?.value ?? '').replace(/\D/g, '')
+
+  if (!code) {
+    setQuoteLookupResult('접수번호를 입력해 주세요.', 'error')
+    $('#quoteCodeInput')?.focus()
+    return
+  }
+
+  if (phoneLast4.length !== 4) {
+    setQuoteLookupResult('연락처 끝 4자리를 입력해 주세요.', 'error')
+    $('#quotePhoneInput')?.focus()
+    return
+  }
+
+  if (!hasSupabaseConfig()) {
+    setQuoteLookupResult('실시간 조회는 Supabase 테스트 연결 후 사용할 수 있습니다.', 'error')
+    return
+  }
+
+  setQuoteLookupResult('접수 상태를 확인하는 중입니다.')
+
+  try {
+    const rows = await supabaseRequest('/rest/v1/rpc/lookup_web_quote', {
+      method: 'POST',
+      body: JSON.stringify({
+        input_quote_code: code,
+        input_phone_last4: phoneLast4,
+      }),
+    })
+    const quote = Array.isArray(rows) ? rows[0] : rows
+
+    if (!quote) {
+      setQuoteLookupResult('일치하는 사전 견적 접수를 찾지 못했습니다.', 'error')
+      return
+    }
+
+    const statusLabel = {
+      pending: '접수 대기',
+      approved: '승인 완료',
+      paid: '지급 완료',
+      rejected: '거절 처리',
+    }[quote.status] ?? quote.status
+    const itemCount = Number(quote.item_count ?? 0)
+    setQuoteLookupResult(
+      `${quote.quote_code} · ${statusLabel} · ${itemCount}장 · 예상 ${formatPrice(Number(quote.total_price ?? 0))}`,
+      'success'
+    )
+  } catch (error) {
+    console.error('[lookupQuoteStatus]', error)
+    setQuoteLookupResult('상태 조회에 실패했습니다. 접수번호를 확인하거나 잠시 후 다시 시도해 주세요.', 'error')
   }
 }
 
@@ -640,8 +709,8 @@ function renderCart() {
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7 6.5 8.3 3h7.4L17 6.5h3v2h-1.1l-1.2 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5.1 8.5H4v-2h3Zm3.4-1.5-.6 1.5h4.4L13.6 5h-3.2Zm-3.2 3.5 1.1 9.9h7.4l1.1-9.9H7.2Zm3.1 2.1v5.9h-1.8v-5.9h1.8Zm5.2 0v5.9h-1.8v-5.9h1.8Z" />
         </svg>
-        <strong>매입 목록이 비어있습니다</strong>
-        <span>카드를 선택하면 여기에 담깁니다.</span>
+        <strong>견적 목록이 비어있습니다</strong>
+        <span>카드를 선택하면 사전 견적에 담깁니다.</span>
       </div>
     `
     return
@@ -773,7 +842,7 @@ function addSelectedToCart() {
   renderCart()
   setCartOpen(true)
   closeOverlay('#detailOverlay')
-  showToast('매입 목록에 추가했습니다.')
+  showToast('견적 목록에 추가했습니다.')
 }
 
 document.addEventListener('click', (event) => {
@@ -890,6 +959,11 @@ $('#mobileCartButton').addEventListener('click', () => {
   setCartOpen(!$('.cart-panel').classList.contains('open'))
 })
 
+$('#quoteLookupForm').addEventListener('submit', (event) => {
+  event.preventDefault()
+  lookupQuoteStatus()
+})
+
 $('#openAdmin').addEventListener('click', () => openOverlay('#adminOverlay'))
 $('#closeAdmin').addEventListener('click', () => closeOverlay('#adminOverlay'))
 
@@ -910,13 +984,17 @@ $('#submitCheckout').addEventListener('click', async () => {
     state.cart = []
     resetCheckoutForm()
     renderCart()
-    showToast(`매입 신청이 접수되었습니다. (${receipt.id})`)
+    if (receipt.quoteCode) {
+      $('#quoteCodeInput').value = receipt.quoteCode
+      setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
+    }
+    showToast(`사전 견적이 접수되었습니다. (${receipt.quoteCode ?? receipt.id})`)
   } catch (error) {
     console.error('[submitCheckout]', error)
-    setCheckoutError('매입 신청 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    setCheckoutError('사전 견적 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.')
   } finally {
     submitButton.disabled = false
-    submitButton.textContent = '매입 신청 접수'
+    submitButton.textContent = '사전 견적 접수'
   }
 })
 

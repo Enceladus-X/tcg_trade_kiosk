@@ -261,6 +261,103 @@ select:focus-visible {
   font-weight: 900;
 }
 
+.quote-lookup {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.6fr) minmax(360px, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(54, 101, 243, 0.08), transparent 44%),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.quote-lookup > div strong,
+.quote-lookup > div span {
+  display: block;
+}
+
+.quote-lookup > div strong {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.quote-lookup > div span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quote-lookup-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.5fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.quote-lookup-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.quote-lookup-form label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.quote-lookup-form input {
+  min-height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  padding: 0 12px;
+  color: var(--on);
+  background: white;
+  font-weight: 900;
+}
+
+.quote-lookup-form button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 15px;
+  color: white;
+  background: var(--on);
+  font-weight: 900;
+}
+
+.quote-lookup-result {
+  grid-column: 1 / -1;
+  display: none;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 12px;
+  color: #075985;
+  background: rgba(14, 165, 233, 0.12);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.quote-lookup-result.show {
+  display: block;
+}
+
+.quote-lookup-result[data-status="error"] {
+  color: var(--danger);
+  background: rgba(179, 38, 30, 0.1);
+}
+
+.quote-lookup-result[data-status="success"] {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
 .market-layout {
   display: block;
 }
@@ -1597,6 +1694,11 @@ button:active {
 
 @media (max-width: 960px) {
   .market-header {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-lookup,
+  .quote-lookup-form {
     grid-template-columns: 1fr;
   }
 

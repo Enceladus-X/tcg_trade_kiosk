@@ -88,6 +88,8 @@ function dbToOrder(
   return {
     id: row.id,
     createdAt: row.created_at,
+    channel: row.channel ?? 'kiosk',
+    webQuoteCode: row.web_quote_code ?? null,
     customerName: row.customer_name,
     bankName: row.bank_name,
     accountNumber: row.account_number,
