@@ -111,7 +111,15 @@ const DEFAULT_RUNTIME_CONFIG = {
   supabaseAnonKey: '',
   submitOrders: false,
   mileageRate: 1.1,
+  quoteValidityHours: 24,
 }
+
+const CONDITION_OPTIONS = [
+  { id: 'near_mint', label: '깨끗함', description: '눈에 띄는 하자 없음', minRate: 0.9, maxRate: 1 },
+  { id: 'light_played', label: '미세 하자', description: '가벼운 백화·스크래치', minRate: 0.72, maxRate: 0.9 },
+  { id: 'played', label: '플레이용', description: '사용감과 복수 하자', minRate: 0.45, maxRate: 0.72 },
+  { id: 'damaged', label: '손상', description: '눌림·오염·심한 휨', minRate: 0, maxRate: 0.45 },
+]
 
 let runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG }
 let liveData = window.KIOSK_DATA ?? null
@@ -127,6 +135,7 @@ const state = {
   search: '',
   selectedCard: null,
   selectedRarity: null,
+  selectedCondition: 'near_mint',
   quantity: 1,
   cart: [],
   payout: 'cash',
@@ -154,6 +163,71 @@ let scrollRenderScheduled = false
 
 function formatPrice(value) {
   return `${money.format(value)}원`
+}
+
+function getCondition(conditionId) {
+  return CONDITION_OPTIONS.find((condition) => condition.id === conditionId) ?? CONDITION_OPTIONS[0]
+}
+
+function roundEstimate(value) {
+  return Math.max(0, Math.round(value / 100) * 100)
+}
+
+function getItemEstimateRange(item) {
+  const condition = getCondition(item.declaredCondition)
+  const quantity = Number(item.quantity ?? 1)
+  let minimum = roundEstimate(Number(item.price) * condition.minRate) * quantity
+  let maximum = roundEstimate(Number(item.price) * condition.maxRate) * quantity
+
+  if (state.payout === 'mileage') {
+    minimum = Math.round(minimum * getMileageRate())
+    maximum = Math.round(maximum * getMileageRate())
+  }
+
+  return { minimum, maximum }
+}
+
+function getCartEstimateRange() {
+  return state.cart.reduce((range, item) => {
+    const itemRange = getItemEstimateRange(item)
+    return {
+      minimum: range.minimum + itemRange.minimum,
+      maximum: range.maximum + itemRange.maximum,
+    }
+  }, { minimum: 0, maximum: 0 })
+}
+
+function formatPriceRange(range) {
+  if (range.minimum === range.maximum) return formatPrice(range.maximum)
+  return `${formatPrice(range.minimum)}~${formatPrice(range.maximum)}`
+}
+
+function getQuoteValidityHours() {
+  const configuredHours = Number(runtimeConfig.quoteValidityHours)
+  return Number.isFinite(configuredHours) && configuredHours > 0 ? Math.min(configuredHours, 168) : 24
+}
+
+function getLocalQuoteExpiry() {
+  return new Date(Date.now() + getQuoteValidityHours() * 60 * 60 * 1000).toISOString()
+}
+
+function formatDateTime(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function updateQuoteValidityLabels() {
+  const label = `${getQuoteValidityHours()}시간`
+  const quoteLabel = $('#quoteValidityLabel')
+  const checkoutLabel = $('#checkoutValidity')
+  if (quoteLabel) quoteLabel.textContent = label
+  if (checkoutLabel) checkoutLabel.textContent = label
 }
 
 function escapeHtml(value) {
@@ -372,6 +446,7 @@ async function fetchSupabaseData() {
 
 async function initializeRuntime() {
   runtimeConfig = await loadRuntimeConfig()
+  updateQuoteValidityLabels()
 
   if (runtimeConfig.dataSource !== 'supabase' || !hasSupabaseConfig()) {
     setDataStatus('스냅샷 데이터', 'snapshot')
@@ -530,11 +605,6 @@ function renderCards() {
   `).join('') || '<div class="empty-cart">조건에 맞는 카드가 없습니다.</div>'
 }
 
-function getCartTotal() {
-  const base = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  return state.payout === 'mileage' ? Math.round(base * getMileageRate()) : base
-}
-
 function getMileageRate() {
   const configuredRate = Number(runtimeConfig.mileageRate)
   return Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : 1.1
@@ -593,7 +663,7 @@ function resetCheckoutForm() {
 async function submitCheckoutOrder() {
   if (!runtimeConfig.submitOrders || !hasSupabaseConfig()) {
     const localId = createReceiptId()
-    return { id: localId, quoteCode: localId, remote: false }
+    return { id: localId, quoteCode: localId, expiresAt: getLocalQuoteExpiry(), remote: false }
   }
 
   const fields = getCheckoutFieldValues()
@@ -608,6 +678,8 @@ async function submitCheckoutOrder() {
       rarity: item.rarity,
       quantity: item.quantity,
       payment_method: state.payout,
+      declared_condition: item.declaredCondition,
+      declared_defects: item.declaredDefects ?? [],
     })),
   }
 
@@ -623,6 +695,7 @@ async function submitCheckoutOrder() {
     orderId: receipt?.order_id ?? null,
     quoteCode: receipt?.quote_code ?? receipt?.id ?? null,
     status: receipt?.status ?? 'pending',
+    expiresAt: receipt?.expires_at ?? getLocalQuoteExpiry(),
     remote: true,
   }
 }
@@ -633,6 +706,61 @@ function setQuoteLookupResult(message, status = 'info') {
   result.textContent = message
   result.dataset.status = status
   result.classList.toggle('show', Boolean(message))
+}
+
+function renderQuoteLookupResult(quote) {
+  const result = $('#quoteLookupResult')
+  if (!result) return
+
+  const statusLabels = {
+    pending: '접수 대기',
+    approved: '검수·승인 완료',
+    paid: '지급 완료',
+    rejected: '거절 처리',
+  }
+  const status = String(quote.status ?? 'pending')
+  const statusLabel = statusLabels[status] ?? status
+  const itemCount = Number(quote.item_count ?? 0)
+  const expiresAt = quote.expires_at ? new Date(quote.expires_at) : null
+  const isExpired = Boolean(quote.is_expired) || Boolean(expiresAt && expiresAt.getTime() < Date.now())
+  const activeStep = status === 'paid' ? 3 : status === 'approved' ? 2 : 1
+  const steps = status === 'rejected'
+    ? [
+        { label: '접수', active: true },
+        { label: '검토', active: true },
+        { label: '거절', active: true, rejected: true },
+      ]
+    : [
+        { label: '접수', active: activeStep >= 1 },
+        { label: '검수·승인', active: activeStep >= 2 },
+        { label: '지급', active: activeStep >= 3 },
+      ]
+
+  result.dataset.status = status === 'rejected' ? 'error' : 'success'
+  result.classList.add('show')
+  result.innerHTML = `
+    <div class="quote-result-head">
+      <div>
+        <strong>${escapeHtml(quote.quote_code)}</strong>
+        <span>${escapeHtml(statusLabel)}</span>
+      </div>
+      <b>${itemCount}장 · 기준 ${formatPrice(Number(quote.total_price ?? 0))}</b>
+    </div>
+    <div class="quote-timeline" aria-label="견적 진행 상태">
+      ${steps.map((step) => `
+        <span class="${step.active ? 'active' : ''} ${step.rejected ? 'rejected' : ''}">
+          <i></i>${escapeHtml(step.label)}
+        </span>
+      `).join('')}
+    </div>
+    <p class="quote-expiry ${isExpired ? 'expired' : ''}">
+      ${expiresAt
+        ? isExpired
+          ? `견적 유효시간이 ${escapeHtml(formatDateTime(expiresAt))}에 만료되었습니다. 매입가는 다시 확인됩니다.`
+          : `${escapeHtml(formatDateTime(expiresAt))}까지 사전 견적이 유효합니다.`
+        : '매장 실물 검수 후 최종 매입가가 확정됩니다.'}
+    </p>
+  `
 }
 
 async function lookupQuoteStatus() {
@@ -673,17 +801,7 @@ async function lookupQuoteStatus() {
       return
     }
 
-    const statusLabel = {
-      pending: '접수 대기',
-      approved: '승인 완료',
-      paid: '지급 완료',
-      rejected: '거절 처리',
-    }[quote.status] ?? quote.status
-    const itemCount = Number(quote.item_count ?? 0)
-    setQuoteLookupResult(
-      `${quote.quote_code} · ${statusLabel} · ${itemCount}장 · 예상 ${formatPrice(Number(quote.total_price ?? 0))}`,
-      'success'
-    )
+    renderQuoteLookupResult(quote)
   } catch (error) {
     console.error('[lookupQuoteStatus]', error)
     setQuoteLookupResult('상태 조회에 실패했습니다. 접수번호를 확인하거나 잠시 후 다시 시도해 주세요.', 'error')
@@ -692,11 +810,12 @@ async function lookupQuoteStatus() {
 
 function renderCart() {
   const totalQuantity = state.cart.reduce((sum, item) => sum + item.quantity, 0)
+  const estimateRange = getCartEstimateRange()
   $('#mobileCartButton').classList.toggle('has-items', state.cart.length > 0)
   $('#cartCount').textContent = `${state.cart.length}종 / ${totalQuantity}장`
-  $('#cartTotal').textContent = formatPrice(getCartTotal())
-  $('#mobileCartTotal').textContent = formatPrice(getCartTotal())
-  $('#checkoutTotal').textContent = formatPrice(getCartTotal())
+  $('#cartTotal').textContent = formatPriceRange(estimateRange)
+  $('#mobileCartTotal').textContent = formatPriceRange(estimateRange)
+  $('#checkoutTotal').textContent = formatPriceRange(estimateRange)
   $('#openCheckout').disabled = state.cart.length === 0
 
   $$('#globalPayout button').forEach((button) => {
@@ -716,21 +835,25 @@ function renderCart() {
     return
   }
 
-  $('#cartItems').innerHTML = state.cart.map((item, index) => `
+  $('#cartItems').innerHTML = state.cart.map((item, index) => {
+    const itemEstimate = getItemEstimateRange(item)
+    return `
     <div class="cart-item">
       <div class="cart-thumb" style="${escapeHtml(cardStyle(item))}">
         ${safeUrl(item.imageUrl) ? `<img src="${escapeHtml(safeUrl(item.imageUrl))}" alt="" loading="lazy" />` : ''}
       </div>
       <div>
         <strong>${escapeHtml(item.name)}</strong>
-        <span><i class="cart-rarity" style="${escapeHtml(rarityStyle(item.rarity))}">${escapeHtml(item.rarity)}</i> x${item.quantity} · ${formatPrice(item.price)}</span>
+        <span><i class="cart-rarity" style="${escapeHtml(rarityStyle(item.rarity))}">${escapeHtml(item.rarity)}</i> x${item.quantity} · 기준 ${formatPrice(item.price)}</span>
+        <small class="cart-condition">자가진단 · ${escapeHtml(getCondition(item.declaredCondition).label)}</small>
       </div>
       <div>
-        <b>${formatPrice(item.price * item.quantity)}</b>
+        <b>${formatPriceRange(itemEstimate)}</b>
         <button class="remove-item" type="button" data-index="${index}" aria-label="${escapeHtml(item.name)} 삭제">×</button>
       </div>
     </div>
-  `).join('')
+  `
+  }).join('')
 }
 
 function renderAll() {
@@ -795,6 +918,7 @@ function openDetail(cardId) {
 
   state.selectedCard = card
   state.selectedRarity = Object.keys(card.prices)[0]
+  state.selectedCondition = 'near_mint'
   state.quantity = 1
 
   $('#detailArt').style.setProperty('--card-bg', safeCssColor(card.color))
@@ -806,6 +930,7 @@ function openDetail(cardId) {
   $('#detailSet').textContent = `${games[card.game].label} · ${getCardSetLabel(card)}`
   $('#quantityValue').textContent = state.quantity
   renderPriceOptions()
+  renderConditionOptions()
   openOverlay('#detailOverlay', '#addToCart')
 }
 
@@ -819,12 +944,42 @@ function renderPriceOptions() {
   `).join('')
 }
 
+function renderConditionOptions() {
+  const container = $('#conditionOptions')
+  const estimate = $('#conditionEstimate')
+  const card = state.selectedCard
+  if (!container || !estimate || !card || !state.selectedRarity) return
+
+  container.innerHTML = CONDITION_OPTIONS.map((condition) => `
+    <button
+      type="button"
+      class="${condition.id === state.selectedCondition ? 'active' : ''}"
+      data-condition="${escapeHtml(condition.id)}"
+    >
+      <strong>${escapeHtml(condition.label)}</strong>
+      <span>${escapeHtml(condition.description)}</span>
+    </button>
+  `).join('')
+
+  const condition = getCondition(state.selectedCondition)
+  const basePrice = Number(card.prices[state.selectedRarity] ?? 0)
+  const minimum = roundEstimate(basePrice * condition.minRate)
+  const maximum = roundEstimate(basePrice * condition.maxRate)
+  estimate.textContent = `자가진단 예상 범위 ${formatPrice(minimum)} ~ ${formatPrice(maximum)} · 실물 검수 후 확정`
+}
+
 function addSelectedToCart() {
   const card = state.selectedCard
   const rarity = state.selectedRarity
   if (!card || !rarity) return
 
-  const existing = state.cart.find((item) => item.id === card.id && item.rarity === rarity)
+  const declaredCondition = getCondition(state.selectedCondition).id
+
+  const existing = state.cart.find((item) => (
+    item.id === card.id &&
+    item.rarity === rarity &&
+    item.declaredCondition === declaredCondition
+  ))
   if (existing) {
     existing.quantity += state.quantity
   } else {
@@ -834,6 +989,8 @@ function addSelectedToCart() {
       rarity,
       price: card.prices[rarity],
       quantity: state.quantity,
+      declaredCondition,
+      declaredDefects: [],
       color: card.color,
       imageUrl: card.imageUrl,
     })
@@ -876,6 +1033,14 @@ document.addEventListener('click', (event) => {
   if (priceButton) {
     state.selectedRarity = priceButton.dataset.priceRarity
     renderPriceOptions()
+    renderConditionOptions()
+    return
+  }
+
+  const conditionButton = event.target.closest('[data-condition]')
+  if (conditionButton) {
+    state.selectedCondition = conditionButton.dataset.condition
+    renderConditionOptions()
     return
   }
 
@@ -986,7 +1151,8 @@ $('#submitCheckout').addEventListener('click', async () => {
     renderCart()
     if (receipt.quoteCode) {
       $('#quoteCodeInput').value = receipt.quoteCode
-      setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
+      const expiryLabel = receipt.expiresAt ? `${formatDateTime(receipt.expiresAt)}까지 유효합니다.` : ''
+      setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. ${expiryLabel} 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
     }
     showToast(`사전 견적이 접수되었습니다. (${receipt.quoteCode ?? receipt.id})`)
   } catch (error) {

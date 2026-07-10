@@ -83,6 +83,8 @@ function dbToOrder(
     quantity: item.quantity,
     paymentMethod: ('payment_method' in item ? item.payment_method : undefined) ?? localPaymentMethodsByItemId[item.id] ?? (row.payment_method === 'mileage' ? 'mileage' : 'cash'),
     note: ('note' in item ? item.note : undefined) ?? localNotesByItemId[item.id] ?? null,
+    declaredCondition: item.declared_condition ?? 'unspecified',
+    declaredDefects: item.declared_defects ?? [],
   }))
 
   return {
@@ -90,6 +92,7 @@ function dbToOrder(
     createdAt: row.created_at,
     channel: row.channel ?? 'kiosk',
     webQuoteCode: row.web_quote_code ?? null,
+    quoteExpiresAt: row.quote_expires_at ?? null,
     customerName: row.customer_name,
     bankName: row.bank_name,
     accountNumber: row.account_number,
@@ -112,6 +115,15 @@ function isMissingPaymentMethodColumnError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const maybeError = error as { code?: string; message?: string }
   return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && maybeError.message.includes("'payment_method' column")
+}
+
+function isMissingDeclarationColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && (
+    maybeError.message.includes("'declared_condition' column") ||
+    maybeError.message.includes("'declared_defects' column")
+  )
 }
 
 const ORDERS_KEY = ['orders'] as const
@@ -394,6 +406,8 @@ export function useOrders() {
           quantity: splitQuantity,
           payment_method: split.paymentMethod,
           note: split.note ?? null,
+          declared_condition: split.sourceItem.declaredCondition ?? 'unspecified',
+          declared_defects: split.sourceItem.declaredDefects ?? [],
         }
 
         let { data: insertedItem, error: insertError } = await supabase
@@ -402,8 +416,17 @@ export function useOrders() {
           .select('id')
           .single()
 
+        if (insertError && isMissingDeclarationColumnError(insertError)) {
+          const { declared_condition: _declaredCondition, declared_defects: _declaredDefects, ...legacyPayload } = payload
+          ;({ data: insertedItem, error: insertError } = await supabase
+            .from('order_items')
+            .insert(legacyPayload)
+            .select('id')
+            .single())
+        }
+
         if (insertError && (isMissingNoteColumnError(insertError) || isMissingPaymentMethodColumnError(insertError))) {
-          const fallbackPayload: Omit<typeof payload, 'payment_method' | 'note'> & { note?: string | null } = {
+          const fallbackPayload: Omit<typeof payload, 'payment_method' | 'note' | 'declared_condition' | 'declared_defects'> & { note?: string | null } = {
             order_id: payload.order_id,
             card_id: payload.card_id,
             card_name: payload.card_name,

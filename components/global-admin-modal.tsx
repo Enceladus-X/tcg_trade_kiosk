@@ -25,7 +25,7 @@ import { useStoreSettings } from '@/lib/use-settings'
 import { useGames, type Game } from '@/lib/use-games'
 import { useImageUpload } from '@/lib/use-image-upload'
 import { CardDetailModal } from '@/components/card-detail-modal'
-import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus, type CardPrice, type PaymentMethod, type OrderPaymentMethod } from '@/lib/mock-cards'
+import { formatPrice, getRarityColors, type CardWithStatus, type DeclaredCardCondition, type OrderStatus, type CardPrice, type PaymentMethod, type OrderPaymentMethod } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
 
@@ -120,6 +120,27 @@ function parseCsvRow(line: string): string[] {
 
   cells.push(current.trim())
   return cells
+}
+
+const declaredConditionConfig: Record<DeclaredCardCondition, { label: string; color: string }> = {
+  unspecified: { label: '상태 미입력', color: 'bg-zinc-700/70 text-zinc-400' },
+  near_mint: { label: '자가진단 · 깨끗함', color: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20' },
+  light_played: { label: '자가진단 · 미세 하자', color: 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-400/20' },
+  played: { label: '자가진단 · 플레이용', color: 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/20' },
+  damaged: { label: '자가진단 · 손상', color: 'bg-red-500/15 text-red-300 ring-1 ring-red-400/20' },
+}
+
+function getDeclaredConditionConfig(value: DeclaredCardCondition | null | undefined) {
+  return declaredConditionConfig[value ?? 'unspecified'] ?? declaredConditionConfig.unspecified
+}
+
+function escapePrintHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 function deriveOrderPaymentMethod(items: { paymentMethod: PaymentMethod }[]): OrderPaymentMethod {
@@ -1173,12 +1194,13 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           : '현금'
     const itemRows = order.items.map((item) => `
       <tr>
-        <td>${item.cardName}</td>
-        <td>${item.rarity}</td>
+        <td>${escapePrintHtml(item.cardName)}</td>
+        <td>${escapePrintHtml(item.rarity)}</td>
         <td>${item.quantity}</td>
         <td>${formatPrice(item.price)}</td>
         <td>${item.paymentMethod === 'mileage' ? '마일리지' : '현금'}</td>
-        <td>${item.note ?? ''}</td>
+        <td>${escapePrintHtml(getDeclaredConditionConfig(item.declaredCondition).label)}</td>
+        <td>${escapePrintHtml(item.note)}</td>
       </tr>
     `).join('')
 
@@ -1204,12 +1226,12 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         <h1>마린포드 ${title}</h1>
         <div class="meta">${statusLabel} 일시: ${formatDate(order.createdAt)}</div>
         <div class="box">
-          ${order.webQuoteCode ? `<div>웹 접수번호: ${order.webQuoteCode}</div>` : ''}
+          ${order.webQuoteCode ? `<div>웹 접수번호: ${escapePrintHtml(order.webQuoteCode)}</div>` : ''}
           ${order.channel === 'web' ? '<div>접수채널: 웹 사전견적</div>' : ''}
-          <div>고객명: ${order.customerName}</div>
-          <div>연락처: ${order.phoneNumber}</div>
-          <div>계좌: ${order.bankName} ${order.accountNumber}</div>
-          <div>결제수단: ${order.paymentMethod === 'mileage' ? '마일리지' : '현금'}</div>
+          <div>고객명: ${escapePrintHtml(order.customerName)}</div>
+          <div>연락처: ${escapePrintHtml(order.phoneNumber)}</div>
+          <div>계좌: ${escapePrintHtml(order.bankName)} ${escapePrintHtml(order.accountNumber)}</div>
+          <div>결제수단: ${escapePrintHtml(paymentMethodLabel)}</div>
           ${order.paymentMethod === 'mileage' && order.mileageRate
             ? `<div>마일리지 추가 지급: +${mileagePercent}%</div>
                <div>마일리지 적용 지급액: ${formatPrice(mileageAppliedTotal ?? order.totalPrice)}</div>`
@@ -1223,6 +1245,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
               <th>레어도</th>
               <th>수량</th>
               <th>매입가</th>
+              <th>지급 방식</th>
+              <th>고객 자가진단</th>
               <th>조정 사유</th>
             </tr>
           </thead>
@@ -1677,6 +1701,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                     const isAdjusted = adjustedOrderIds.has(order.id) || orderAuditEntries.length > 0
                     const orderGameBadges = getOrderGameBadges(order)
                     const isWebOrder = order.channel === 'web' || Boolean(order.webQuoteCode)
+                    const quoteExpiresAt = order.quoteExpiresAt ? new Date(order.quoteExpiresAt) : null
+                    const hasValidQuoteExpiry = Boolean(quoteExpiresAt && !Number.isNaN(quoteExpiresAt.getTime()))
+                    const isQuoteExpired = Boolean(hasValidQuoteExpiry && quoteExpiresAt!.getTime() <= Date.now())
                     const effectiveOrderPaymentMethod = deriveOrderPaymentMethod(
                       order.items.map((item) => ({
                         paymentMethod: paymentMethodArr?.[item.itemId!] ?? item.paymentMethod,
@@ -1747,6 +1774,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                 {order.webQuoteCode && (
                                   <span className="inline-flex items-center rounded-full bg-zinc-700 px-2 py-0.5 text-xs font-black tracking-wide text-zinc-200">
                                     {order.webQuoteCode}
+                                  </span>
+                                )}
+                                {hasValidQuoteExpiry && (
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${
+                                    isQuoteExpired
+                                      ? 'bg-red-500/15 text-red-300 ring-red-400/25'
+                                      : 'bg-blue-500/15 text-blue-300 ring-blue-400/25'
+                                  }`}>
+                                    <Clock className="h-3 w-3" />
+                                    {isQuoteExpired ? '견적 만료' : `${formatDate(order.quoteExpiresAt!)}까지`}
                                   </span>
                                 )}
                                 {isAdjusted && (
@@ -1841,6 +1878,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                               </div>
                               {order.items.map((item, idx) => {
                                 const colors = getRarityColors(item.rarity)
+                                const declaredCondition = getDeclaredConditionConfig(item.declaredCondition)
                                 const cardImg = item.cardId ? cardImageById.get(item.cardId) : undefined
                                 const savedPrice = item.itemId ? priceArr?.[item.itemId] : undefined
                                 const savedQuantity = item.itemId ? quantityArr?.[item.itemId] : undefined
@@ -1883,6 +1921,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                                           {displayPaymentMethod === 'mileage' ? <Coins className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
                                           {displayPaymentMethod === 'mileage' ? '마일리지' : '현금'}
                                         </span>
+                                        {item.declaredCondition && item.declaredCondition !== 'unspecified' && (
+                                          <span className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${declaredCondition.color}`}>
+                                            {declaredCondition.label}
+                                          </span>
+                                        )}
                                         {isPriceAdjustedVisual && (
                                           <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/15 px-2 py-0.5 text-[11px] font-bold text-sky-200">
                                             <Scissors className="h-3 w-3" />

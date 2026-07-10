@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#000000" />
   <meta name="description" content="마린포드 카드 매입 사전견적. 카드별 매입가를 확인하고 방문 전 견적을 접수하세요." />
   <title>마린포드 웹 사전견적</title>
-  <link rel="stylesheet" href="./styles.css?v=marketplace-1" />
+  <link rel="stylesheet" href="./styles.css?v=marketplace-2" />
   <script defer src="./data.js"></script>
   <script defer src="./script.js"></script>
 </head>
@@ -61,7 +61,7 @@
         </label>
         <button id="lookupQuote" type="submit">상태 조회</button>
       </form>
-      <p class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></p>
+      <div class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></div>
     </section>
 
     <section class="market-layout">
@@ -111,6 +111,10 @@
         <div class="cart-items" id="cartItems">
           <div class="empty-cart">카드를 선택하면 사전 견적에 담깁니다.</div>
         </div>
+        <div class="quote-validity">
+          <span>현재 견적 유효시간</span>
+          <strong id="quoteValidityLabel">24시간</strong>
+        </div>
         <div class="payout-box">
           <span>지급 방식</span>
           <div class="payout-toggle" id="globalPayout">
@@ -119,7 +123,7 @@
           </div>
         </div>
         <div class="total-box">
-          <span>예상 지급액</span>
+          <span>자가진단 예상 범위</span>
           <strong id="cartTotal">0원</strong>
         </div>
         <button class="checkout-button" id="openCheckout" type="button">사전 견적 접수</button>
@@ -144,6 +148,17 @@
         <h2 id="detailName"></h2>
         <p id="detailSet"></p>
         <div class="price-options" id="priceOptions"></div>
+        <section class="condition-panel" aria-labelledby="conditionTitle">
+          <div class="condition-head">
+            <div>
+              <strong id="conditionTitle">현재 카드 상태</strong>
+              <span>가장 가까운 상태를 선택해 예상 범위를 확인하세요.</span>
+            </div>
+            <b>자가진단</b>
+          </div>
+          <div class="condition-options" id="conditionOptions"></div>
+          <p class="condition-estimate" id="conditionEstimate"></p>
+        </section>
         <div class="quantity-row">
           <button id="qtyMinus" type="button">−</button>
           <strong id="quantityValue">1</strong>
@@ -164,8 +179,12 @@
         <button class="icon-button" id="closeCheckout" type="button" aria-label="접수 닫기">×</button>
       </div>
       <div class="checkout-summary">
-        <span>예상 지급액</span>
+        <span>자가진단 예상 범위</span>
         <strong id="checkoutTotal">0원</strong>
+      </div>
+      <div class="checkout-validity">
+        <span>접수 견적 유효시간</span>
+        <strong id="checkoutValidity">24시간</strong>
       </div>
       <div class="form-grid">
         <label>
@@ -187,7 +206,7 @@
       </div>
       <p class="form-error" id="checkoutError" role="alert" hidden></p>
       <button class="submit-button" id="submitCheckout" type="button">사전 견적 접수</button>
-      <p class="checkout-note">접수번호를 보관해 주세요. 매장 검수 후 최종 매입가와 지급 방식이 확정됩니다.</p>
+      <p class="checkout-note">접수번호를 보관해 주세요. 견적은 표시된 시간까지 유효하며, 매장 실물 검수 후 카드별 최종 매입가가 확정됩니다.</p>
     </section>
   </div>
 

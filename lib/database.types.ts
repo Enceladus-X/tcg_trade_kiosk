@@ -1,7 +1,7 @@
 // Supabase DB 행 타입 — 컬럼명은 snake_case, JS 인터페이스는 camelCase
 // 이 파일만 수정하면 스키마 변경이 나머지 코드에 자동 전파됨
 
-import type { CardPrice, OrderStatus, OrderPaymentMethod, PaymentMethod } from './mock-cards'
+import type { CardPrice, DeclaredCardCondition, OrderStatus, OrderPaymentMethod, PaymentMethod } from './mock-cards'
 
 export type DbCard = {
   id: string
@@ -45,6 +45,7 @@ export type DbOrder = {
   mileage_rate: number | null
   channel?: string | null
   web_quote_code?: string | null
+  quote_expires_at?: string | null
   order_items?: DbOrderItem[]
 }
 
@@ -67,6 +68,8 @@ export type DbOrderItem = {
   quantity: number
   payment_method?: PaymentMethod | null
   note: string | null
+  declared_condition?: DeclaredCardCondition | null
+  declared_defects?: string[] | null
 }
 
 export type DbOrderItemAdjustment = {

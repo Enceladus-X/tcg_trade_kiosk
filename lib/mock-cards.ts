@@ -7,6 +7,7 @@ export interface CardPrice {
 
 export type PaymentMethod = 'cash' | 'mileage'
 export type OrderPaymentMethod = PaymentMethod | 'mixed'
+export type DeclaredCardCondition = 'unspecified' | 'near_mint' | 'light_played' | 'played' | 'damaged'
 
 export interface Card {
   id: string
@@ -38,6 +39,8 @@ export interface CartItem {
   quantity: number
   paymentMethod: PaymentMethod
   note?: string | null
+  declaredCondition?: DeclaredCardCondition | null
+  declaredDefects?: string[]
 }
 
 export interface CardWithStatus extends Card {
@@ -52,6 +55,7 @@ export interface PendingOrder {
   createdAt: string
   channel?: 'kiosk' | 'web' | string | null
   webQuoteCode?: string | null
+  quoteExpiresAt?: string | null
   customerName: string
   bankName: string
   accountNumber: string
