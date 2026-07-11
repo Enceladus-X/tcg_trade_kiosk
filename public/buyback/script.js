@@ -119,10 +119,9 @@ let liveData = window.KIOSK_DATA ?? null
 let dataModel = buildDataModel(liveData)
 let games = dataModel.games
 let cards = dataModel.cards
-let initialGame = dataModel.initialGame
 
 const state = {
-  game: initialGame,
+  game: null,
   set: '전체',
   rarity: '전체',
   search: '',
@@ -242,7 +241,6 @@ function buildDataModel(sourceData) {
     return {
       games: fallbackGames,
       cards: fallbackCards,
-      initialGame: Object.keys(fallbackGames)[0],
     }
   }
 
@@ -280,8 +278,7 @@ function buildDataModel(sourceData) {
     }]
   }))
 
-  const nextInitialGame = Object.keys(sourceGames).find((gameId) => sourceCards.some((card) => card.game === gameId)) ?? Object.keys(sourceGames)[0]
-  return { games: sourceGames, cards: sourceCards, initialGame: nextInitialGame }
+  return { games: sourceGames, cards: sourceCards }
 }
 
 function applyDataSource(sourceData) {
@@ -289,13 +286,13 @@ function applyDataSource(sourceData) {
   dataModel = buildDataModel(sourceData)
   games = dataModel.games
   cards = dataModel.cards
-  initialGame = dataModel.initialGame
 
-  if (!games[state.game] || !cards.some((card) => card.game === state.game)) {
-    state.game = initialGame
+  if (state.game && (!games[state.game] || !cards.some((card) => card.game === state.game))) {
+    state.game = null
   }
-  if (!games[state.game]?.sets.includes(state.set)) state.set = '전체'
-  if (!games[state.game]?.rarities.includes(state.rarity)) state.rarity = '전체'
+  const filterOptions = getCurrentFilterOptions()
+  if (!filterOptions.sets.includes(state.set)) state.set = '전체'
+  if (!filterOptions.rarities.includes(state.rarity)) state.rarity = '전체'
   state.displayLimit = 24
 }
 
@@ -450,9 +447,26 @@ function getCardSetLabel(card) {
   return tab?.name ?? card.set
 }
 
+function getCurrentFilterOptions() {
+  if (state.game && games[state.game]) {
+    return {
+      sets: games[state.game].sets,
+      rarities: games[state.game].rarities,
+    }
+  }
+
+  const sets = [...new Set(Object.values(games).flatMap((game) => game.sets.filter((set) => set !== '전체')))]
+  const rarities = [...new Set(Object.values(games).flatMap((game) => game.rarities.filter((rarity) => rarity !== '전체')))]
+
+  return {
+    sets: ['전체', ...sets],
+    rarities: ['전체', ...rarities],
+  }
+}
+
 function getFilteredCards() {
   const filtered = cards.filter((card) => {
-    if (card.game !== state.game) return false
+    if (state.game && card.game !== state.game) return false
     if (state.set !== '전체' && getCardSetLabel(card) !== state.set && card.set !== state.set) return false
     if (state.rarity !== '전체' && !card.prices[state.rarity]) return false
     if (!state.search.trim()) return true
@@ -482,11 +496,11 @@ function renderGameControls() {
     button.classList.toggle('active', button.dataset.game === state.game)
   })
 
-  const game = games[state.game]
-  $('#setSelect').innerHTML = game.sets.map((set) => `<option value="${escapeHtml(set)}">${escapeHtml(set)}</option>`).join('')
+  const filterOptions = getCurrentFilterOptions()
+  $('#setSelect').innerHTML = filterOptions.sets.map((set) => `<option value="${escapeHtml(set)}">${escapeHtml(set)}</option>`).join('')
   $('#setSelect').value = state.set
 
-  $('#rarityChips').innerHTML = game.rarities
+  $('#rarityChips').innerHTML = filterOptions.rarities
     .map((rarity) => `<button type="button" class="${rarity === state.rarity ? 'active' : ''}" data-rarity="${escapeHtml(rarity)}" style="${escapeHtml(rarityStyle(rarity))}">${escapeHtml(rarity)}</button>`)
     .join('')
 }
@@ -505,7 +519,7 @@ function renderCards() {
   renderSortControls()
 
   if (filtered.length === 0) {
-    const gameLabel = games[state.game]?.label ?? '선택한 게임'
+    const gameLabel = games[state.game]?.label ?? '전체 게임'
     const scopeLabel = state.set === '전체' ? gameLabel : state.set
     $('#cardGrid').innerHTML = `
       <div class="catalog-empty" role="status">
@@ -894,7 +908,7 @@ function addSelectedToCart() {
 document.addEventListener('click', (event) => {
   const gameButton = event.target.closest('.game-logo')
   if (gameButton) {
-    state.game = gameButton.dataset.game
+    state.game = state.game === gameButton.dataset.game ? null : gameButton.dataset.game
     state.set = '전체'
     state.rarity = '전체'
     state.search = ''
