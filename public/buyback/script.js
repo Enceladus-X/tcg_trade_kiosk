@@ -176,7 +176,9 @@ function escapeHtml(value) {
 
 function safeUrl(value) {
   try {
-    const url = new URL(String(value ?? ''), window.location.href)
+    const normalizedValue = String(value ?? '').trim()
+    if (!normalizedValue) return ''
+    const url = new URL(normalizedValue, window.location.href)
     return SAFE_IMAGE_PROTOCOLS.has(url.protocol) ? url.href : ''
   } catch {
     return ''
