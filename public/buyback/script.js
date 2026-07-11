@@ -534,8 +534,8 @@ function renderCards() {
         <div class="price-ladder">
           ${Object.entries(card.prices).map(([rarity, price]) => `
             <span class="rarity-price" style="${escapeHtml(rarityStyle(rarity))}">
-              <b>${escapeHtml(rarity)}</b>
               <em>${formatPrice(price)}</em>
+              <b>${escapeHtml(rarity)}</b>
             </span>
           `).join('')}
         </div>
@@ -859,8 +859,8 @@ function renderPriceOptions() {
   const card = state.selectedCard
   $('#priceOptions').innerHTML = Object.entries(card.prices).map(([rarity, price]) => `
     <button type="button" class="${rarity === state.selectedRarity ? 'active' : ''}" data-price-rarity="${escapeHtml(rarity)}" style="${escapeHtml(rarityStyle(rarity))}">
-      <b>${escapeHtml(rarity)}</b>
       <span>${formatPrice(price)}</span>
+      <b>${escapeHtml(rarity)}</b>
     </button>
   `).join('')
 }
@@ -955,6 +955,8 @@ $('#setSelect').addEventListener('change', (event) => {
 
 $('#closeDetail').addEventListener('click', () => closeOverlay('#detailOverlay'))
 $('#closeCheckout').addEventListener('click', () => closeOverlay('#checkoutOverlay'))
+$('#closeQuoteLookup').addEventListener('click', () => closeOverlay('#quoteLookupOverlay'))
+$('#openQuoteLookup').addEventListener('click', () => openOverlay('#quoteLookupOverlay', '#quoteCodeInput'))
 
 const renderCardsFromSearch = debounce(() => {
   state.displayLimit = 24
@@ -1037,9 +1039,8 @@ $('#submitCheckout').addEventListener('click', async () => {
     setCartOpen(false)
     if (receipt.quoteCode) {
       $('#quoteCodeInput').value = receipt.quoteCode
-      const quoteLookup = $('#quoteLookup')
-      if (quoteLookup) quoteLookup.open = true
       setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
+      openOverlay('#quoteLookupOverlay', '#quoteCodeInput')
     }
     showToast(`사전 견적이 접수되었습니다. (${receipt.quoteCode ?? receipt.id})`)
   } catch (error) {

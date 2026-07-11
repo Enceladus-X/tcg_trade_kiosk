@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#000000" />
   <meta name="description" content="마린포드 카드 매입 사전견적. 카드별 매입가를 확인하고 방문 전 견적을 접수하세요." />
   <title>마린포드 웹 사전견적</title>
-  <link rel="stylesheet" href="./styles.css?v=marketplace-4c" />
+  <link rel="stylesheet" href="./styles.css?v=marketplace-5" />
   <script defer src="./data.js"></script>
-  <script defer src="./script.js?v=marketplace-4c"></script>
+  <script defer src="./script.js?v=marketplace-5"></script>
 </head>
 <body>
   <a class="skip-link" href="#catalog">카드 목록으로 이동</a>
@@ -38,36 +38,18 @@
         <span></span>
         <b>스냅샷 데이터</b>
       </div>
-      <a class="admin-button" id="openAdmin" href="#">관리자</a>
+      <button class="lookup-button" id="openQuoteLookup" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 4.5h16v15H4zM8 2.5v4M16 2.5v4M4 9h16M8 13h3M8 16h6" />
+        </svg>
+        사전접수 조회
+      </button>
+      <a class="admin-button" id="openAdmin" href="#" target="_blank" rel="noopener noreferrer">관리자</a>
     </div>
   </header>
 
   <main class="market-shell">
     <section class="game-strip" id="gameStrip" aria-label="게임 선택"></section>
-
-    <details class="quote-lookup" id="quoteLookup">
-      <summary class="quote-lookup-summary">
-        <span>
-          <strong>사전접수 상태 조회</strong>
-          <small>접수번호가 있을 때 열어 확인하세요.</small>
-        </span>
-        <b>조회하기</b>
-      </summary>
-      <div class="quote-lookup-body">
-        <form class="quote-lookup-form" id="quoteLookupForm">
-          <label>
-            <span>접수번호</span>
-            <input id="quoteCodeInput" type="text" placeholder="MW-260710-A1B2" autocomplete="off" />
-          </label>
-          <label>
-            <span>연락처 끝 4자리</span>
-            <input id="quotePhoneInput" type="text" placeholder="0000" inputmode="numeric" maxlength="4" autocomplete="off" />
-          </label>
-          <button id="lookupQuote" type="submit">상태 조회</button>
-        </form>
-        <div class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></div>
-      </div>
-    </details>
 
     <section class="market-layout">
       <section class="catalog-area" id="catalog" tabindex="-1">
@@ -140,21 +122,60 @@
     <strong id="mobileCartTotal">0원</strong>
   </button>
 
+  <div class="overlay" id="quoteLookupOverlay" aria-hidden="true">
+    <section class="lookup-modal" role="dialog" aria-modal="true" aria-labelledby="quoteLookupTitle">
+      <div class="modal-head lookup-modal-head">
+        <div>
+          <span>PRE-REGISTRATION</span>
+          <strong id="quoteLookupTitle">사전접수 상태 조회</strong>
+          <small>접수번호와 연락처 끝 4자리를 입력해 주세요.</small>
+        </div>
+        <button class="icon-button" id="closeQuoteLookup" type="button" aria-label="상태조회 닫기">×</button>
+      </div>
+      <form class="quote-lookup-form" id="quoteLookupForm">
+        <label>
+          <span>접수번호</span>
+          <input id="quoteCodeInput" type="text" placeholder="MW-260710-A1B2" autocomplete="off" />
+        </label>
+        <label>
+          <span>연락처 끝 4자리</span>
+          <input id="quotePhoneInput" type="text" placeholder="0000" inputmode="numeric" maxlength="4" autocomplete="off" />
+        </label>
+        <button id="lookupQuote" type="submit">접수 상태 확인</button>
+      </form>
+      <div class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></div>
+    </section>
+  </div>
+
   <div class="overlay" id="detailOverlay" aria-hidden="true">
     <section class="detail-modal" role="dialog" aria-modal="true" aria-label="카드 상세">
       <button class="icon-button detail-close" id="closeDetail" type="button" aria-label="상세 닫기">×</button>
       <div class="detail-art" id="detailArt"></div>
       <div class="detail-content">
-        <span class="detail-code" id="detailCode"></span>
-        <h2 id="detailName"></h2>
-        <p id="detailSet"></p>
-        <div class="price-options" id="priceOptions"></div>
-        <div class="quantity-row">
-          <button id="qtyMinus" type="button">−</button>
-          <strong id="quantityValue">1</strong>
-          <button id="qtyPlus" type="button">+</button>
+        <div class="detail-heading">
+          <span class="detail-code" id="detailCode"></span>
+          <h2 id="detailName"></h2>
+          <p id="detailSet"></p>
         </div>
-        <button class="add-button" id="addToCart" type="button">견적 목록에 추가</button>
+        <div class="detail-buy-panel">
+          <div class="detail-section-label">
+            <span>매입 옵션</span>
+            <small>판매할 레어도와 수량을 선택하세요.</small>
+          </div>
+          <div class="price-options" id="priceOptions"></div>
+          <div class="detail-action-row">
+            <div class="quantity-control">
+              <span>수량</span>
+              <div class="quantity-row">
+                <button id="qtyMinus" type="button" aria-label="수량 줄이기">−</button>
+                <strong id="quantityValue">1</strong>
+                <button id="qtyPlus" type="button" aria-label="수량 늘리기">+</button>
+              </div>
+            </div>
+            <button class="add-button" id="addToCart" type="button">견적 목록에 추가</button>
+          </div>
+        </div>
+        <p class="detail-note">표시 금액은 사전견적이며, 매장 실물 검수 후 최종 매입가가 확정됩니다.</p>
       </div>
     </section>
   </div>
@@ -163,36 +184,49 @@
     <section class="checkout-modal" role="dialog" aria-modal="true" aria-label="사전 견적 접수">
       <div class="modal-head">
         <div>
-          <span>사전 견적 접수</span>
-          <strong>방문 전 정보를 남겨주세요</strong>
+          <span>PRE-REGISTRATION</span>
+          <strong>방문 전 접수 정보를 남겨주세요</strong>
+          <small>입력한 정보는 매장 검수와 지급 확인에만 사용됩니다.</small>
         </div>
         <button class="icon-button" id="closeCheckout" type="button" aria-label="접수 닫기">×</button>
       </div>
-      <div class="checkout-summary">
-        <span>예상 지급액</span>
-        <strong id="checkoutTotal">0원</strong>
+      <div class="checkout-layout">
+        <aside class="checkout-overview">
+          <span>예상 지급액</span>
+          <strong id="checkoutTotal">0원</strong>
+          <div>
+            <b>접수 후 진행</b>
+            <ol>
+              <li>접수번호 발급</li>
+              <li>매장 방문 및 실물 검수</li>
+              <li>최종 금액 확인 후 지급</li>
+            </ol>
+          </div>
+        </aside>
+        <div class="checkout-form-panel">
+          <div class="form-grid">
+            <label>
+              <span>이름</span>
+              <input id="customerName" name="customerName" type="text" placeholder="홍길동" autocomplete="name" required />
+            </label>
+            <label>
+              <span>연락처</span>
+              <input id="customerPhone" name="customerPhone" type="tel" placeholder="010-0000-0000" autocomplete="tel" inputmode="tel" pattern="[0-9\-\s]{9,14}" required />
+            </label>
+            <label>
+              <span>은행</span>
+              <input id="bankName" name="bankName" type="text" placeholder="국민은행" autocomplete="off" required />
+            </label>
+            <label>
+              <span>계좌번호</span>
+              <input id="accountNumber" name="accountNumber" type="text" placeholder="000000-00-000000" autocomplete="off" inputmode="numeric" pattern="[0-9\-\s]{6,24}" required />
+            </label>
+          </div>
+          <p class="form-error" id="checkoutError" role="alert" hidden></p>
+          <button class="submit-button" id="submitCheckout" type="button">사전 견적 접수</button>
+          <p class="checkout-note">접수번호를 보관해 주세요. 최종 가격은 매장 검수 후 확정됩니다.</p>
+        </div>
       </div>
-      <div class="form-grid">
-        <label>
-          <span>이름</span>
-          <input id="customerName" name="customerName" type="text" placeholder="홍길동" autocomplete="name" required />
-        </label>
-        <label>
-          <span>연락처</span>
-          <input id="customerPhone" name="customerPhone" type="tel" placeholder="010-0000-0000" autocomplete="tel" inputmode="tel" pattern="[0-9\-\s]{9,14}" required />
-        </label>
-        <label>
-          <span>은행</span>
-          <input id="bankName" name="bankName" type="text" placeholder="국민은행" autocomplete="off" required />
-        </label>
-        <label>
-          <span>계좌번호</span>
-          <input id="accountNumber" name="accountNumber" type="text" placeholder="000000-00-000000" autocomplete="off" inputmode="numeric" pattern="[0-9\-\s]{6,24}" required />
-        </label>
-      </div>
-      <p class="form-error" id="checkoutError" role="alert" hidden></p>
-      <button class="submit-button" id="submitCheckout" type="button">사전 견적 접수</button>
-      <p class="checkout-note">접수번호를 보관해 주세요. 매장 실물 검수 후 카드별 최종 매입가가 확정됩니다.</p>
     </section>
   </div>
 
