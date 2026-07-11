@@ -47,6 +47,14 @@ export default function POSPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('admin') !== 'orders') return
+
+    setShowGlobalPinOverlay(true)
+  }, [])
+
+  useEffect(() => {
     if (!isOnline || isFetching) return
 
     setLastSyncedAt(new Date())

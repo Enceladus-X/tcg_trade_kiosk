@@ -111,15 +111,8 @@ const DEFAULT_RUNTIME_CONFIG = {
   supabaseAnonKey: '',
   submitOrders: false,
   mileageRate: 1.1,
-  quoteValidityHours: 24,
+  adminUrl: '',
 }
-
-const CONDITION_OPTIONS = [
-  { id: 'near_mint', label: '깨끗함', description: '눈에 띄는 하자 없음', minRate: 0.9, maxRate: 1 },
-  { id: 'light_played', label: '미세 하자', description: '가벼운 백화·스크래치', minRate: 0.72, maxRate: 0.9 },
-  { id: 'played', label: '플레이용', description: '사용감과 복수 하자', minRate: 0.45, maxRate: 0.72 },
-  { id: 'damaged', label: '손상', description: '눌림·오염·심한 휨', minRate: 0, maxRate: 0.45 },
-]
 
 let runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG }
 let liveData = window.KIOSK_DATA ?? null
@@ -135,8 +128,6 @@ const state = {
   search: '',
   selectedCard: null,
   selectedRarity: null,
-  selectedCondition: null,
-  conditionExpanded: false,
   quantity: 1,
   cart: [],
   payout: 'cash',
@@ -166,69 +157,13 @@ function formatPrice(value) {
   return `${money.format(value)}원`
 }
 
-function getCondition(conditionId) {
-  return CONDITION_OPTIONS.find((condition) => condition.id === conditionId) ?? null
+function getCartItemTotal(item) {
+  const subtotal = Number(item.price) * Number(item.quantity)
+  return state.payout === 'mileage' ? Math.round(subtotal * getMileageRate()) : subtotal
 }
 
-function roundEstimate(value) {
-  return Math.max(0, Math.round(value / 100) * 100)
-}
-
-function getItemEstimateRange(item) {
-  const condition = getCondition(item.declaredCondition) ?? CONDITION_OPTIONS[0]
-  const quantity = Number(item.quantity ?? 1)
-  let minimum = roundEstimate(Number(item.price) * condition.minRate) * quantity
-  let maximum = roundEstimate(Number(item.price) * condition.maxRate) * quantity
-
-  if (state.payout === 'mileage') {
-    minimum = Math.round(minimum * getMileageRate())
-    maximum = Math.round(maximum * getMileageRate())
-  }
-
-  return { minimum, maximum }
-}
-
-function getCartEstimateRange() {
-  return state.cart.reduce((range, item) => {
-    const itemRange = getItemEstimateRange(item)
-    return {
-      minimum: range.minimum + itemRange.minimum,
-      maximum: range.maximum + itemRange.maximum,
-    }
-  }, { minimum: 0, maximum: 0 })
-}
-
-function formatPriceRange(range) {
-  if (range.minimum === range.maximum) return formatPrice(range.maximum)
-  return `${formatPrice(range.minimum)}~${formatPrice(range.maximum)}`
-}
-
-function getQuoteValidityHours() {
-  const configuredHours = Number(runtimeConfig.quoteValidityHours)
-  return Number.isFinite(configuredHours) && configuredHours > 0 ? Math.min(configuredHours, 168) : 24
-}
-
-function getLocalQuoteExpiry() {
-  return new Date(Date.now() + getQuoteValidityHours() * 60 * 60 * 1000).toISOString()
-}
-
-function formatDateTime(value) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function updateQuoteValidityLabels() {
-  const label = `${getQuoteValidityHours()}시간`
-  const quoteLabel = $('#quoteValidityLabel')
-  const checkoutLabel = $('#checkoutValidity')
-  if (quoteLabel) quoteLabel.textContent = label
-  if (checkoutLabel) checkoutLabel.textContent = label
+function getCartTotal() {
+  return state.cart.reduce((sum, item) => sum + getCartItemTotal(item), 0)
 }
 
 function escapeHtml(value) {
@@ -376,7 +311,8 @@ async function loadRuntimeConfig() {
   try {
     const response = await fetch('./runtime-config.json', { cache: 'no-store' })
     if (!response.ok) return { ...DEFAULT_RUNTIME_CONFIG }
-    const config = await response.json()
+    const rawConfig = await response.text()
+    const config = JSON.parse(rawConfig.replace(/^\uFEFF/, ''))
     return { ...DEFAULT_RUNTIME_CONFIG, ...config }
   } catch {
     return { ...DEFAULT_RUNTIME_CONFIG }
@@ -406,65 +342,54 @@ async function supabaseRequest(path, options = {}) {
   return response.json()
 }
 
-async function fetchSupabaseData() {
-  const [remoteGames, remoteTabs, remoteCards, settingsRows] = await Promise.all([
-    supabaseRequest('/rest/v1/web_games?select=id,name,image_url,sort_order&order=sort_order.asc'),
-    supabaseRequest('/rest/v1/web_tabs?select=id,game_id,name,sort_order&order=sort_order.asc'),
-    supabaseRequest('/rest/v1/web_cards?select=id,game_id,tab_id,category,name,code,image_url,prices&order=category.asc,name.asc'),
-    supabaseRequest('/rest/v1/web_public_settings?select=mileage_rate,global_rarities&limit=1'),
+async function fetchSupabaseImages() {
+  const [remoteGames, remoteCards] = await Promise.all([
+    supabaseRequest('/rest/v1/games?select=id,image_url'),
+    supabaseRequest('/rest/v1/cards?select=id,code,image_url'),
   ])
 
-  const settings = Array.isArray(settingsRows) ? settingsRows[0] : null
-  if (settings?.mileage_rate) runtimeConfig.mileageRate = Number(settings.mileage_rate)
+  const gameImageById = new Map(remoteGames.map((game) => [game.id, game.image_url]))
+  const cardImageById = new Map(remoteCards.map((card) => [card.id, card.image_url]))
+  const cardImageByCode = new Map(remoteCards.map((card) => [card.code, card.image_url]))
+  const snapshot = liveData ?? window.KIOSK_DATA
 
   return {
+    ...snapshot,
     generatedAt: new Date().toISOString(),
-    games: remoteGames.map((game) => ({
-      id: game.id,
-      name: game.name,
-      imageUrl: game.image_url,
-      sortOrder: game.sort_order,
-    })),
-    tabs: remoteTabs.map((tab) => ({
-      id: tab.id,
-      gameId: tab.game_id,
-      name: tab.name,
-      sortOrder: tab.sort_order,
-    })),
-    cards: remoteCards.map((card) => ({
-      id: card.id,
-      game: card.game_id,
-      tabId: card.tab_id,
-      set: card.category,
-      name: card.name,
-      code: card.code,
-      imageUrl: card.image_url,
-      prices: card.prices,
-    })),
-    rarityOrder: settings?.global_rarities ?? [],
+    games: (snapshot?.games ?? []).map((game) => {
+      const imageUrl = gameImageById.get(game.id) || game.imageUrl || game.image_url || ''
+      return { ...game, imageUrl, image_url: imageUrl }
+    }),
+    cards: (snapshot?.cards ?? []).map((card) => {
+      const imageUrl = cardImageById.get(card.id) || cardImageByCode.get(card.code) || card.imageUrl || card.image_url || ''
+      return { ...card, imageUrl, image_url: imageUrl }
+    }),
   }
 }
 
 async function initializeRuntime() {
   runtimeConfig = await loadRuntimeConfig()
-  updateQuoteValidityLabels()
+  const adminEntry = $('#openAdmin')
+  const adminUrl = safeUrl(runtimeConfig.adminUrl)
+  if (adminEntry && adminUrl) adminEntry.href = adminUrl
+  const usesDatabaseImages = runtimeConfig.dataSource === 'snapshot-images' || runtimeConfig.dataSource === 'supabase'
 
-  if (runtimeConfig.dataSource !== 'supabase' || !hasSupabaseConfig()) {
+  if (!usesDatabaseImages || !hasSupabaseConfig()) {
     setDataStatus('스냅샷 데이터', 'snapshot')
     return
   }
 
-  setDataStatus('실시간 동기화 중', 'loading')
+  setDataStatus('DB 이미지 불러오는 중', 'loading')
 
   try {
-    const remoteData = await fetchSupabaseData()
-    applyDataSource(remoteData)
+    const imageData = await fetchSupabaseImages()
+    applyDataSource(imageData)
     renderAll()
-    setDataStatus('실시간 데이터', 'live')
+    setDataStatus('DB 이미지 적용', 'live')
   } catch (error) {
     console.error('[initializeRuntime]', error)
-    setDataStatus('스냅샷으로 표시', 'error')
-    showToast('실시간 데이터 연결 실패: 스냅샷으로 표시합니다.')
+    setDataStatus('기본 이미지 표시', 'error')
+    showToast('DB 이미지 연결 실패: 기본 이미지를 표시합니다.')
   }
 }
 
@@ -579,6 +504,19 @@ function renderCards() {
   $('#resultCount').textContent = `${filtered.length}장`
   renderSortControls()
 
+  if (filtered.length === 0) {
+    const gameLabel = games[state.game]?.label ?? '선택한 게임'
+    const scopeLabel = state.set === '전체' ? gameLabel : state.set
+    $('#cardGrid').innerHTML = `
+      <div class="catalog-empty" role="status">
+        <span class="catalog-empty-icon" aria-hidden="true"></span>
+        <strong>${escapeHtml(scopeLabel)} 매입 카드가 아직 없습니다</strong>
+        <p>다른 게임이나 확장팩을 선택해 주세요.</p>
+      </div>
+    `
+    return
+  }
+
   $('#cardGrid').innerHTML = visible.map((card) => `
     <button class="card-tile" type="button" data-card-id="${escapeHtml(card.id)}" style="${escapeHtml(cardStyle(card))}">
       <div class="card-image-frame">
@@ -603,7 +541,7 @@ function renderCards() {
         </div>
       </div>
     </button>
-  `).join('') || '<div class="empty-cart">조건에 맞는 카드가 없습니다.</div>'
+  `).join('')
 }
 
 function getMileageRate() {
@@ -664,7 +602,7 @@ function resetCheckoutForm() {
 async function submitCheckoutOrder() {
   if (!runtimeConfig.submitOrders || !hasSupabaseConfig()) {
     const localId = createReceiptId()
-    return { id: localId, quoteCode: localId, expiresAt: getLocalQuoteExpiry(), remote: false }
+    return { id: localId, quoteCode: localId, remote: false }
   }
 
   const fields = getCheckoutFieldValues()
@@ -679,8 +617,6 @@ async function submitCheckoutOrder() {
       rarity: item.rarity,
       quantity: item.quantity,
       payment_method: state.payout,
-      declared_condition: item.declaredCondition,
-      declared_defects: item.declaredDefects ?? [],
     })),
   }
 
@@ -696,7 +632,6 @@ async function submitCheckoutOrder() {
     orderId: receipt?.order_id ?? null,
     quoteCode: receipt?.quote_code ?? receipt?.id ?? null,
     status: receipt?.status ?? 'pending',
-    expiresAt: receipt?.expires_at ?? getLocalQuoteExpiry(),
     remote: true,
   }
 }
@@ -722,8 +657,6 @@ function renderQuoteLookupResult(quote) {
   const status = String(quote.status ?? 'pending')
   const statusLabel = statusLabels[status] ?? status
   const itemCount = Number(quote.item_count ?? 0)
-  const expiresAt = quote.expires_at ? new Date(quote.expires_at) : null
-  const isExpired = Boolean(quote.is_expired) || Boolean(expiresAt && expiresAt.getTime() < Date.now())
   const activeStep = status === 'paid' ? 3 : status === 'approved' ? 2 : 1
   const steps = status === 'rejected'
     ? [
@@ -754,13 +687,6 @@ function renderQuoteLookupResult(quote) {
         </span>
       `).join('')}
     </div>
-    <p class="quote-expiry ${isExpired ? 'expired' : ''}">
-      ${expiresAt
-        ? isExpired
-          ? `견적 유효시간이 ${escapeHtml(formatDateTime(expiresAt))}에 만료되었습니다. 매입가는 다시 확인됩니다.`
-          : `${escapeHtml(formatDateTime(expiresAt))}까지 사전 견적이 유효합니다.`
-        : '매장 실물 검수 후 최종 매입가가 확정됩니다.'}
-    </p>
   `
 }
 
@@ -781,7 +707,7 @@ async function lookupQuoteStatus() {
   }
 
   if (!hasSupabaseConfig()) {
-    setQuoteLookupResult('실시간 조회는 Supabase 테스트 연결 후 사용할 수 있습니다.', 'error')
+    setQuoteLookupResult('상태 조회는 Supabase 테스트 연결 후 사용할 수 있습니다.', 'error')
     return
   }
 
@@ -811,12 +737,12 @@ async function lookupQuoteStatus() {
 
 function renderCart() {
   const totalQuantity = state.cart.reduce((sum, item) => sum + item.quantity, 0)
-  const estimateRange = getCartEstimateRange()
+  const cartTotal = getCartTotal()
   $('#mobileCartButton').classList.toggle('has-items', state.cart.length > 0)
   $('#cartCount').textContent = `${state.cart.length}종 / ${totalQuantity}장`
-  $('#cartTotal').textContent = formatPriceRange(estimateRange)
-  $('#mobileCartTotal').textContent = formatPriceRange(estimateRange)
-  $('#checkoutTotal').textContent = formatPriceRange(estimateRange)
+  $('#cartTotal').textContent = formatPrice(cartTotal)
+  $('#mobileCartTotal').textContent = formatPrice(cartTotal)
+  $('#checkoutTotal').textContent = formatPrice(cartTotal)
   $('#openCheckout').disabled = state.cart.length === 0
 
   $$('#globalPayout button').forEach((button) => {
@@ -827,7 +753,7 @@ function renderCart() {
     $('#cartItems').innerHTML = `
       <div class="empty-cart cart-empty-state">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 6.5 8.3 3h7.4L17 6.5h3v2h-1.1l-1.2 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5.1 8.5H4v-2h3Zm3.4-1.5-.6 1.5h4.4L13.6 5h-3.2Zm-3.2 3.5 1.1 9.9h7.4l1.1-9.9H7.2Zm3.1 2.1v5.9h-1.8v-5.9h1.8Zm5.2 0v5.9h-1.8v-5.9h1.8Z" />
+          <path d="M2.5 3.5h2.7l1.9 9.1a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 6.5H6.1M9 19a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm10 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
         </svg>
         <strong>견적 목록이 비어있습니다</strong>
         <span>카드를 선택하면 사전 견적에 담깁니다.</span>
@@ -836,9 +762,7 @@ function renderCart() {
     return
   }
 
-  $('#cartItems').innerHTML = state.cart.map((item, index) => {
-    const itemEstimate = getItemEstimateRange(item)
-    return `
+  $('#cartItems').innerHTML = state.cart.map((item, index) => `
     <div class="cart-item">
       <div class="cart-thumb" style="${escapeHtml(cardStyle(item))}">
         ${safeUrl(item.imageUrl) ? `<img src="${escapeHtml(safeUrl(item.imageUrl))}" alt="" loading="lazy" />` : ''}
@@ -846,15 +770,13 @@ function renderCart() {
       <div>
         <strong>${escapeHtml(item.name)}</strong>
         <span><i class="cart-rarity" style="${escapeHtml(rarityStyle(item.rarity))}">${escapeHtml(item.rarity)}</i> x${item.quantity} · 기준 ${formatPrice(item.price)}</span>
-        <small class="cart-condition">자가진단 · ${escapeHtml((getCondition(item.declaredCondition) ?? CONDITION_OPTIONS[0]).label)}</small>
       </div>
       <div>
-        <b>${formatPriceRange(itemEstimate)}</b>
+        <b>${formatPrice(getCartItemTotal(item))}</b>
         <button class="remove-item" type="button" data-index="${index}" aria-label="${escapeHtml(item.name)} 삭제">×</button>
       </div>
     </div>
-  `
-  }).join('')
+  `).join('')
 }
 
 function renderAll() {
@@ -919,8 +841,6 @@ function openDetail(cardId) {
 
   state.selectedCard = card
   state.selectedRarity = Object.keys(card.prices)[0]
-  state.selectedCondition = null
-  state.conditionExpanded = false
   state.quantity = 1
 
   $('#detailArt').style.setProperty('--card-bg', safeCssColor(card.color))
@@ -932,7 +852,6 @@ function openDetail(cardId) {
   $('#detailSet').textContent = `${games[card.game].label} · ${getCardSetLabel(card)}`
   $('#quantityValue').textContent = state.quantity
   renderPriceOptions()
-  renderConditionOptions()
   openOverlay('#detailOverlay', '#addToCart')
 }
 
@@ -946,70 +865,12 @@ function renderPriceOptions() {
   `).join('')
 }
 
-function renderConditionOptions() {
-  const panel = $('#conditionPanel')
-  const toggle = $('#conditionToggle')
-  const details = $('#conditionDetails')
-  const container = $('#conditionOptions')
-  const estimate = $('#conditionEstimate')
-  const summary = $('#conditionSummaryText')
-  const action = $('#conditionAction')
-  const card = state.selectedCard
-  if (!panel || !toggle || !details || !container || !estimate || !summary || !action || !card || !state.selectedRarity) return
-
-  const condition = getCondition(state.selectedCondition)
-  panel.dataset.expanded = String(state.conditionExpanded)
-  panel.dataset.selected = String(Boolean(condition))
-  toggle.setAttribute('aria-expanded', String(state.conditionExpanded))
-  details.hidden = !state.conditionExpanded
-  action.textContent = condition ? '변경' : '선택'
-
-  container.innerHTML = CONDITION_OPTIONS.map((condition) => `
-    <button
-      type="button"
-      class="${condition.id === state.selectedCondition ? 'active' : ''}"
-      data-condition="${escapeHtml(condition.id)}"
-    >
-      <strong>${escapeHtml(condition.label)}</strong>
-      <span>${escapeHtml(condition.description)}</span>
-    </button>
-  `).join('')
-
-  if (!condition) {
-    summary.textContent = '아직 선택하지 않음'
-    estimate.textContent = ''
-    estimate.hidden = true
-    return
-  }
-
-  const basePrice = Number(card.prices[state.selectedRarity] ?? 0)
-  const minimum = roundEstimate(basePrice * condition.minRate)
-  const maximum = roundEstimate(basePrice * condition.maxRate)
-  summary.textContent = `${condition.label} · ${formatPrice(minimum)}~${formatPrice(maximum)}`
-  estimate.textContent = `예상 범위 ${formatPrice(minimum)}~${formatPrice(maximum)} · 실물 검수 후 확정`
-  estimate.hidden = false
-}
-
 function addSelectedToCart() {
   const card = state.selectedCard
   const rarity = state.selectedRarity
   if (!card || !rarity) return
 
-  const selectedCondition = getCondition(state.selectedCondition)
-  if (!selectedCondition) {
-    state.conditionExpanded = true
-    renderConditionOptions()
-    $('#conditionToggle')?.focus()
-    showToast('카드 상태를 먼저 선택해 주세요.')
-    return
-  }
-  const declaredCondition = selectedCondition.id
-
-  const existing = state.cart.find((item) => (
-    item.id === card.id &&
-    item.rarity === rarity &&
-    item.declaredCondition === declaredCondition
-  ))
+  const existing = state.cart.find((item) => item.id === card.id && item.rarity === rarity)
   if (existing) {
     existing.quantity += state.quantity
   } else {
@@ -1019,8 +880,6 @@ function addSelectedToCart() {
       rarity,
       price: card.prices[rarity],
       quantity: state.quantity,
-      declaredCondition,
-      declaredDefects: [],
       color: card.color,
       imageUrl: card.imageUrl,
     })
@@ -1063,22 +922,6 @@ document.addEventListener('click', (event) => {
   if (priceButton) {
     state.selectedRarity = priceButton.dataset.priceRarity
     renderPriceOptions()
-    renderConditionOptions()
-    return
-  }
-
-  const conditionButton = event.target.closest('[data-condition]')
-  if (conditionButton) {
-    state.selectedCondition = conditionButton.dataset.condition
-    state.conditionExpanded = false
-    renderConditionOptions()
-    return
-  }
-
-  const conditionToggle = event.target.closest('#conditionToggle')
-  if (conditionToggle) {
-    state.conditionExpanded = !state.conditionExpanded
-    renderConditionOptions()
     return
   }
 
@@ -1167,8 +1010,12 @@ $('#quoteLookupForm').addEventListener('submit', (event) => {
   lookupQuoteStatus()
 })
 
-$('#openAdmin').addEventListener('click', () => openOverlay('#adminOverlay'))
-$('#closeAdmin').addEventListener('click', () => closeOverlay('#adminOverlay'))
+$('#openAdmin').addEventListener('click', (event) => {
+  const adminUrl = safeUrl(runtimeConfig.adminUrl)
+  if (adminUrl) return
+  event.preventDefault()
+  showToast('접수 주문은 키오스크 관리자 매입 요청 탭에서 확인할 수 있습니다.')
+})
 
 $('#submitCheckout').addEventListener('click', async () => {
   const [message, focusSelector] = validateCheckoutForm()
@@ -1187,10 +1034,12 @@ $('#submitCheckout').addEventListener('click', async () => {
     state.cart = []
     resetCheckoutForm()
     renderCart()
+    setCartOpen(false)
     if (receipt.quoteCode) {
       $('#quoteCodeInput').value = receipt.quoteCode
-      const expiryLabel = receipt.expiresAt ? `${formatDateTime(receipt.expiresAt)}까지 유효합니다.` : ''
-      setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. ${expiryLabel} 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
+      const quoteLookup = $('#quoteLookup')
+      if (quoteLookup) quoteLookup.open = true
+      setQuoteLookupResult(`${receipt.quoteCode} 사전 견적이 접수되었습니다. 매장 검수 후 최종 금액이 확정됩니다.`, 'success')
     }
     showToast(`사전 견적이 접수되었습니다. (${receipt.quoteCode ?? receipt.id})`)
   } catch (error) {

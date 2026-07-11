@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#000000" />
   <meta name="description" content="마린포드 카드 매입 사전견적. 카드별 매입가를 확인하고 방문 전 견적을 접수하세요." />
   <title>마린포드 웹 사전견적</title>
-  <link rel="stylesheet" href="./styles.css?v=marketplace-3" />
+  <link rel="stylesheet" href="./styles.css?v=marketplace-4c" />
   <script defer src="./data.js"></script>
-  <script defer src="./script.js"></script>
+  <script defer src="./script.js?v=marketplace-4c"></script>
 </head>
 <body>
   <a class="skip-link" href="#catalog">카드 목록으로 이동</a>
@@ -38,31 +38,36 @@
         <span></span>
         <b>스냅샷 데이터</b>
       </div>
-      <button class="admin-button" id="openAdmin" type="button">관리자</button>
+      <a class="admin-button" id="openAdmin" href="#">관리자</a>
     </div>
   </header>
 
   <main class="market-shell">
     <section class="game-strip" id="gameStrip" aria-label="게임 선택"></section>
 
-    <section class="quote-lookup" aria-label="사전 견적 조회">
-      <div>
-        <strong>웹 접수는 사전 견적입니다</strong>
-        <span>매장 검수 후 최종 매입가가 확정됩니다.</span>
+    <details class="quote-lookup" id="quoteLookup">
+      <summary class="quote-lookup-summary">
+        <span>
+          <strong>사전접수 상태 조회</strong>
+          <small>접수번호가 있을 때 열어 확인하세요.</small>
+        </span>
+        <b>조회하기</b>
+      </summary>
+      <div class="quote-lookup-body">
+        <form class="quote-lookup-form" id="quoteLookupForm">
+          <label>
+            <span>접수번호</span>
+            <input id="quoteCodeInput" type="text" placeholder="MW-260710-A1B2" autocomplete="off" />
+          </label>
+          <label>
+            <span>연락처 끝 4자리</span>
+            <input id="quotePhoneInput" type="text" placeholder="0000" inputmode="numeric" maxlength="4" autocomplete="off" />
+          </label>
+          <button id="lookupQuote" type="submit">상태 조회</button>
+        </form>
+        <div class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></div>
       </div>
-      <form class="quote-lookup-form" id="quoteLookupForm">
-        <label>
-          <span>접수번호</span>
-          <input id="quoteCodeInput" type="text" placeholder="MW-260710-A1B2" autocomplete="off" />
-        </label>
-        <label>
-          <span>연락처 끝 4자리</span>
-          <input id="quotePhoneInput" type="text" placeholder="0000" inputmode="numeric" maxlength="4" autocomplete="off" />
-        </label>
-        <button id="lookupQuote" type="submit">상태 조회</button>
-      </form>
-      <div class="quote-lookup-result" id="quoteLookupResult" role="status" aria-live="polite"></div>
-    </section>
+    </details>
 
     <section class="market-layout">
       <section class="catalog-area" id="catalog" tabindex="-1">
@@ -111,10 +116,6 @@
         <div class="cart-items" id="cartItems">
           <div class="empty-cart">카드를 선택하면 사전 견적에 담깁니다.</div>
         </div>
-        <div class="quote-validity">
-          <span>현재 견적 유효시간</span>
-          <strong id="quoteValidityLabel">24시간</strong>
-        </div>
         <div class="payout-box">
           <span>지급 방식</span>
           <div class="payout-toggle" id="globalPayout">
@@ -123,7 +124,7 @@
           </div>
         </div>
         <div class="total-box">
-          <span>자가진단 예상 범위</span>
+          <span>예상 지급액</span>
           <strong id="cartTotal">0원</strong>
         </div>
         <button class="checkout-button" id="openCheckout" type="button">사전 견적 접수</button>
@@ -133,7 +134,7 @@
 
   <button class="mobile-cart-button" id="mobileCartButton" type="button" aria-controls="cartPanel" aria-expanded="false">
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M7 6.5 8.3 3h7.4L17 6.5h3v2h-1.1l-1.2 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5.1 8.5H4v-2h3Zm3.4-1.5-.6 1.5h4.4L13.6 5h-3.2Zm-3.2 3.5 1.1 9.9h7.4l1.1-9.9H7.2Zm3.1 2.1v5.9h-1.8v-5.9h1.8Zm5.2 0v5.9h-1.8v-5.9h1.8Z" />
+      <path d="M2.5 3.5h2.7l1.9 9.1a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 6.5H6.1M9 19a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm10 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
     </svg>
     <span>견적 목록</span>
     <strong id="mobileCartTotal">0원</strong>
@@ -148,20 +149,6 @@
         <h2 id="detailName"></h2>
         <p id="detailSet"></p>
         <div class="price-options" id="priceOptions"></div>
-        <section class="condition-panel" id="conditionPanel" aria-labelledby="conditionTitle">
-          <button class="condition-summary" id="conditionToggle" type="button" aria-expanded="false" aria-controls="conditionDetails">
-            <span>
-              <strong id="conditionTitle">카드 상태 선택</strong>
-              <small id="conditionSummaryText">아직 선택하지 않음</small>
-            </span>
-            <b id="conditionAction">선택</b>
-          </button>
-          <div class="condition-details" id="conditionDetails" hidden>
-            <p>실물과 가장 가까운 상태를 선택해 주세요.</p>
-            <div class="condition-options" id="conditionOptions"></div>
-            <p class="condition-estimate" id="conditionEstimate" aria-live="polite"></p>
-          </div>
-        </section>
         <div class="quantity-row">
           <button id="qtyMinus" type="button">−</button>
           <strong id="quantityValue">1</strong>
@@ -182,12 +169,8 @@
         <button class="icon-button" id="closeCheckout" type="button" aria-label="접수 닫기">×</button>
       </div>
       <div class="checkout-summary">
-        <span>자가진단 예상 범위</span>
+        <span>예상 지급액</span>
         <strong id="checkoutTotal">0원</strong>
-      </div>
-      <div class="checkout-validity">
-        <span>접수 견적 유효시간</span>
-        <strong id="checkoutValidity">24시간</strong>
       </div>
       <div class="form-grid">
         <label>
@@ -209,154 +192,7 @@
       </div>
       <p class="form-error" id="checkoutError" role="alert" hidden></p>
       <button class="submit-button" id="submitCheckout" type="button">사전 견적 접수</button>
-      <p class="checkout-note">접수번호를 보관해 주세요. 견적은 표시된 시간까지 유효하며, 매장 실물 검수 후 카드별 최종 매입가가 확정됩니다.</p>
-    </section>
-  </div>
-
-  <div class="overlay admin-overlay" id="adminOverlay" aria-hidden="true">
-    <section class="admin-modal" role="dialog" aria-modal="true" aria-label="관리자 대시보드">
-      <div class="admin-head">
-        <div>
-          <span>STORE BACKOFFICE</span>
-          <strong>관리자 대시보드</strong>
-        </div>
-        <button class="icon-button" id="closeAdmin" type="button" aria-label="관리자 닫기">×</button>
-      </div>
-
-      <div class="admin-kpis">
-        <article>
-          <span>오늘 접수</span>
-          <strong>27건</strong>
-          <em>대기 4건</em>
-        </article>
-        <article>
-          <span>예상 지급액</span>
-          <strong>472,640원</strong>
-          <em>마일리지 25장</em>
-        </article>
-        <article>
-          <span>주의 카드</span>
-          <strong>8종</strong>
-          <em>가격 급등 / 매입 중지</em>
-        </article>
-        <article>
-          <span>이번 주 TOP</span>
-          <strong>유희왕</strong>
-          <em>전체 매입의 63%</em>
-        </article>
-      </div>
-
-      <div class="admin-grid">
-        <section class="admin-card admin-wide">
-          <div class="admin-card-head">
-            <div>
-              <span>매입 요청 큐</span>
-              <strong>검수와 정산을 빠르게 처리</strong>
-            </div>
-            <button type="button">전체 승인</button>
-          </div>
-          <div class="admin-order-list">
-            <article>
-              <b>김정월</b>
-              <span>유희왕 4장 · 현금 · 58,500원</span>
-              <div>
-                <button type="button">검수</button>
-                <button type="button">가격조정</button>
-                <button type="button">거절</button>
-              </div>
-            </article>
-            <article>
-              <b>이지훈</b>
-              <span>원피스 / 유희왕 9장 · 마일리지 · 181,500원</span>
-              <div>
-                <button type="button">검수</button>
-                <button type="button">분류</button>
-                <button type="button">보류</button>
-              </div>
-            </article>
-            <article>
-              <b>현장 접수</b>
-              <span>디지몬 12장 · 혼합 정산 · 76,200원</span>
-              <div>
-                <button type="button">검수</button>
-                <button type="button">영수증</button>
-                <button type="button">완료</button>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="admin-card">
-          <div class="admin-card-head">
-            <div>
-              <span>카드 / 가격 관리</span>
-              <strong>레어도별 일괄 수정</strong>
-            </div>
-          </div>
-          <div class="admin-price-table">
-            <div><b>도미나스 임펄스</b><span>OFUR</span><em>45,000원</em></div>
-            <div><b>로기어스텔라티폰</b><span>SE</span><em>1,200원</em></div>
-            <div><b>사천의용스타브베놈</b><span>UR</span><em>400원</em></div>
-          </div>
-          <button class="admin-primary" type="button">CSV / 시트로 일괄 편집</button>
-        </section>
-
-        <section class="admin-card">
-          <div class="admin-card-head">
-            <div>
-              <span>매입 중지 규칙</span>
-              <strong>손실 방지 자동화</strong>
-            </div>
-          </div>
-          <ul class="admin-checklist">
-            <li>매입가 0원 또는 미등록 레어도 자동 숨김</li>
-            <li>고가 카드 30,000원 이상 검수 2단계</li>
-            <li>특정 카드 / 확장팩 / 레어도 매입 중지</li>
-          </ul>
-        </section>
-
-        <section class="admin-card">
-          <div class="admin-card-head">
-            <div>
-              <span>운영 통계</span>
-              <strong>매입 흐름 확인</strong>
-            </div>
-          </div>
-          <div class="admin-bars">
-            <div style="--bar: 63%"><span>유희왕</span><b></b><em>63%</em></div>
-            <div style="--bar: 28%"><span>원피스</span><b></b><em>28%</em></div>
-            <div style="--bar: 9%"><span>기타</span><b></b><em>9%</em></div>
-          </div>
-        </section>
-
-        <section class="admin-card">
-          <div class="admin-card-head">
-            <div>
-              <span>정산 / 출력</span>
-              <strong>현장 처리용 도구</strong>
-            </div>
-          </div>
-          <ul class="admin-checklist">
-            <li>견적서 / 영수증 출력</li>
-            <li>입금자 정보 복사</li>
-            <li>마일리지 배율 표시</li>
-          </ul>
-        </section>
-
-        <section class="admin-card">
-          <div class="admin-card-head">
-            <div>
-              <span>환경 설정</span>
-              <strong>매장 정책 관리</strong>
-            </div>
-          </div>
-          <ul class="admin-checklist">
-            <li>마일리지 판촉 배율</li>
-            <li>게임 / 확장팩 / 레어도 관리</li>
-            <li>관리자 권한과 접속 로그</li>
-          </ul>
-        </section>
-      </div>
+      <p class="checkout-note">접수번호를 보관해 주세요. 매장 실물 검수 후 카드별 최종 매입가가 확정됩니다.</p>
     </section>
   </div>
 

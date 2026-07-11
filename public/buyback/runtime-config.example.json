@@ -1,8 +1,8 @@
 {
-  "dataSource": "supabase",
+  "dataSource": "snapshot-images",
   "supabaseUrl": "https://YOUR_PROJECT_ID.supabase.co",
   "supabaseAnonKey": "YOUR_PUBLIC_ANON_KEY",
   "submitOrders": false,
   "mileageRate": 1.1,
-  "quoteValidityHours": 24
+  "adminUrl": "http://localhost:3000/?admin=orders"
 }
