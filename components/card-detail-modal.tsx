@@ -197,6 +197,10 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
   }, [availableEditRarities, card.category, card.id, editGameId, editImageUrl, editName, editEnabledRarities, editPrices, editTabId, onClose, tabObjects, updateCardAsync])
 
   const handleCancelEdit = useCallback(() => {
+    if (initialEditMode) {
+      onClose()
+      return
+    }
     setEditMode(false)
     setSaveError(null)
     setEditName(card.name)
@@ -208,7 +212,7 @@ export function CardDetailModal({ card, onClose, initialEditMode = false }: Card
     const basePrices = Object.fromEntries(availableEditRarities.map(r => [r, 0]))
     card.prices.forEach(p => { basePrices[p.rarity] = p.price })
     setEditPrices(basePrices)
-  }, [availableEditRarities, card, fallbackTab])
+  }, [availableEditRarities, card, fallbackTab, initialEditMode, onClose])
 
   return (
     <>

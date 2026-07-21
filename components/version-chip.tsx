@@ -4,14 +4,6 @@ import { useEffect, useState } from 'react'
 import { ExternalLink, Sparkles } from 'lucide-react'
 import { APP_VERSION, isRemoteVersionNewer, LATEST_RELEASE_API_URL, RELEASES_URL } from '@/lib/app-version'
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      openExternal?: (url: string) => Promise<boolean>
-    }
-  }
-}
-
 type LatestReleaseState = {
   latestVersion: string | null
   updateAvailable: boolean

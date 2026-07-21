@@ -466,6 +466,81 @@ export function useOrders() {
     onSuccess: invalidate,
   })
 
+  const unitizeOrderItemsMutation = useMutation({
+    mutationFn: async ({ orderId, items }: { orderId: string; items: CartItem[] }) => {
+      const localNotesByItemId = readLocalOrderItemNotes()
+      const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
+      let createdCount = 0
+
+      for (const item of items) {
+        if (!item.itemId || item.quantity <= 1) continue
+
+        const payload = Array.from({ length: item.quantity - 1 }, () => ({
+          order_id: orderId,
+          card_id: item.cardId || null,
+          card_name: item.cardName,
+          card_code: item.cardCode,
+          rarity: item.rarity,
+          price: item.price,
+          quantity: 1,
+          payment_method: item.paymentMethod,
+          note: item.note ?? null,
+          declared_condition: item.declaredCondition ?? 'unspecified',
+          declared_defects: item.declaredDefects ?? [],
+        }))
+
+        let { data: insertedItems, error: insertError } = await supabase
+          .from('order_items')
+          .insert(payload)
+          .select('id')
+
+        if (insertError && isMissingDeclarationColumnError(insertError)) {
+          const legacyPayload = payload.map(({ declared_condition: _condition, declared_defects: _defects, ...rest }) => rest)
+          ;({ data: insertedItems, error: insertError } = await supabase
+            .from('order_items')
+            .insert(legacyPayload)
+            .select('id'))
+        }
+
+        if (insertError && (isMissingNoteColumnError(insertError) || isMissingPaymentMethodColumnError(insertError))) {
+          const minimalPayload = payload.map(({ payment_method: _paymentMethod, note: _note, declared_condition: _condition, declared_defects: _defects, ...rest }) => rest)
+          ;({ data: insertedItems, error: insertError } = await supabase
+            .from('order_items')
+            .insert(minimalPayload)
+            .select('id'))
+        }
+        if (insertError) throw insertError
+
+        const insertedIds = (insertedItems ?? [])
+          .map((insertedItem) => insertedItem?.id)
+          .filter((id): id is string => Boolean(id))
+
+        const { error: updateError } = await supabase
+          .from('order_items')
+          .update({ quantity: 1 })
+          .eq('id', item.itemId)
+        if (updateError) {
+          if (insertedIds.length > 0) {
+            await supabase.from('order_items').delete().in('id', insertedIds)
+          }
+          throw updateError
+        }
+
+        for (const insertedItem of insertedItems ?? []) {
+          if (!insertedItem?.id) continue
+          if (item.note) localNotesByItemId[insertedItem.id] = item.note
+          localPaymentMethodsByItemId[insertedItem.id] = item.paymentMethod
+          createdCount += 1
+        }
+      }
+
+      writeLocalOrderItemNotes(localNotesByItemId)
+      writeLocalOrderItemPaymentMethods(localPaymentMethodsByItemId)
+      return createdCount
+    },
+    onSuccess: invalidate,
+  })
+
   const deleteMutation = useMutation({
     mutationFn: async (orderId: string) => {
       // order_items는 ON DELETE CASCADE로 자동 삭제
@@ -657,6 +732,11 @@ export function useOrders() {
       ) =>
         splitOrderItemsMutation.mutateAsync({ orderId, splits, newTotal, orderPaymentMethod, mileageRate }),
       [splitOrderItemsMutation]
+    ),
+    unitizeOrderItems: useCallback(
+      (orderId: string, items: CartItem[]) =>
+        unitizeOrderItemsMutation.mutateAsync({ orderId, items }),
+      [unitizeOrderItemsMutation]
     ),
     createPriceAdjustments: useCallback(
       (entries: Omit<OrderItemAdjustment, 'id' | 'changedAt'>[]) =>

@@ -6,8 +6,9 @@ const fs = require('fs')
 const isProd = app.isPackaged
 const loadURL = serve({ directory: path.join(__dirname, '..', 'out') })
 
-const DEFAULT_CONFIG = { adminPin: '' }
+const DEFAULT_CONFIG = { adminPin: '', windowMode: 'kiosk' }
 let config = { ...DEFAULT_CONFIG }
+let mainWindow = null
 
 function getConfigPath() {
   return isProd
@@ -28,16 +29,55 @@ function loadConfig() {
   }
 }
 
+function saveConfig() {
+  try {
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf8')
+  } catch (e) {
+    console.error('config save error:', e)
+  }
+}
+
+function applyWindowMode(win, mode) {
+  const nextMode = mode === 'windowed' ? 'windowed' : 'kiosk'
+  const { workArea } = screen.getDisplayMatching(win.getBounds())
+
+  if (nextMode === 'windowed') {
+    win.setKiosk(false)
+    win.setFullScreen(false)
+    win.setResizable(true)
+    win.setMovable(true)
+    const width = Math.min(1440, workArea.width)
+    const height = Math.min(900, workArea.height)
+    win.setBounds({
+      x: workArea.x + Math.floor((workArea.width - width) / 2),
+      y: workArea.y + Math.floor((workArea.height - height) / 2),
+      width,
+      height,
+    })
+    win.center()
+  } else {
+    win.setBounds(workArea)
+    win.setKiosk(true)
+    win.setResizable(false)
+  }
+
+  config.windowMode = nextMode
+  saveConfig()
+  return nextMode
+}
+
 function createWindow() {
   const { workArea } = screen.getPrimaryDisplay()
+  const isWindowed = config.windowMode === 'windowed'
 
   const win = new BrowserWindow({
     x: workArea.x,
     y: workArea.y,
     width: workArea.width,
     height: workArea.height,
-    frame: false,
-    resizable: false,
+    frame: true,
+    kiosk: !isWindowed,
+    resizable: isWindowed,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -45,6 +85,8 @@ function createWindow() {
       nodeIntegration: false,
     },
   })
+
+  if (isWindowed) applyWindowMode(win, 'windowed')
 
   if (!isProd) {
     win.webContents.openDevTools({ mode: 'detach' })
@@ -71,8 +113,8 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   loadConfig()
-  const win = createWindow()
-  await loadURL(win)
+  mainWindow = createWindow()
+  await loadURL(mainWindow)
 })
 
 app.on('window-all-closed', () => {
@@ -86,4 +128,9 @@ ipcMain.handle('open-external', async (_, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false
   await shell.openExternal(url)
   return true
+})
+ipcMain.handle('get-window-mode', () => config.windowMode === 'windowed' ? 'windowed' : 'kiosk')
+ipcMain.handle('set-window-mode', (_, mode) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return config.windowMode
+  return applyWindowMode(mainWindow, mode)
 })

@@ -28,6 +28,7 @@ import { CardDetailModal } from '@/components/card-detail-modal'
 import { formatPrice, getRarityColors, type CardWithStatus, type OrderStatus, type CardPrice, type PaymentMethod, type OrderPaymentMethod } from '@/lib/mock-cards'
 import { RarityPicker, ALL_RARITIES, type RarityKey } from '@/components/rarity-picker'
 import { ImageUploadField } from '@/components/image-upload-field'
+import { WindowModeSetting } from '@/components/window-mode-setting'
 
 function GameImageUploadButton({ game, onUpload }: { game: Game; onUpload: (url: string) => void }) {
   const { upload, isUploading } = useImageUpload({ bucket: 'game-images', prefix: 'games' })
@@ -325,6 +326,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
     updateOrderStatus,
     updateItemPrices,
     splitOrderItems,
+    unitizeOrderItems,
     createPriceAdjustments,
     cancelPriceAdjustments,
     deleteOrder,
@@ -386,6 +388,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const [cancelingAdjustmentOrderId, setCancelingAdjustmentOrderId] = useState<string | null>(null)
   const [deletingItemKey, setDeletingItemKey] = useState<string | null>(null)
   const [adjustedOrderIds, setAdjustedOrderIds] = useState<Set<string>>(new Set())
+  const [unitizingOrderId, setUnitizingOrderId] = useState<string | null>(null)
+  const [unitizeErrorByOrderId, setUnitizeErrorByOrderId] = useState<Record<string, string>>({})
   const [expandedAuditOrders, setExpandedAuditOrders] = useState<Set<string>>(new Set())
   const [saveErrorByOrderId, setSaveErrorByOrderId] = useState<Record<string, string>>({})
   const [editingItem, setEditingItem] = useState<{ orderId: string; itemId: string; variant: 'base' | 'split' } | null>(null)
@@ -704,6 +708,31 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
         ),
       }
     })
+  }
+
+  const handleUnitizeOrderItems = async (order: (typeof orders)[number]) => {
+    if (!order.items.some((item) => item.quantity > 1)) return
+    setUnitizingOrderId(order.id)
+    setUnitizeErrorByOrderId((prev) => {
+      const next = { ...prev }
+      delete next[order.id]
+      return next
+    })
+    try {
+      await unitizeOrderItems(order.id, order.items)
+      setAdjustedPrices((prev) => ({ ...prev, [order.id]: {} }))
+      setAdjustedNotes((prev) => ({ ...prev, [order.id]: {} }))
+      setAdjustedQuantities((prev) => ({ ...prev, [order.id]: {} }))
+      setPendingItemSplits((prev) => ({ ...prev, [order.id]: {} }))
+      setEditingItem(null)
+    } catch (error) {
+      setUnitizeErrorByOrderId((prev) => ({
+        ...prev,
+        [order.id]: error instanceof Error ? error.message : '낱장별 항목 전환 중 오류가 발생했습니다.',
+      }))
+    } finally {
+      setUnitizingOrderId(null)
+    }
   }
 
   // ---- 가격/메모 DB 저장 ----
@@ -1813,7 +1842,34 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                         {isExpanded && (
                           <div className="border-t border-zinc-700 p-4">
                             <div className="mb-4 space-y-2">
-                              <p className="text-xs font-medium text-zinc-500">매입 품목</p>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-medium text-zinc-500">매입 품목</p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-zinc-500">감가 단위</span>
+                                  <div className="flex rounded-lg border border-zinc-700 bg-zinc-950 p-1">
+                                    <span className={`rounded-md px-3 py-1 text-xs font-bold ${order.items.some((item) => item.quantity > 1) ? 'bg-zinc-700 text-white' : 'text-zinc-600'}`}>
+                                      종류별
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleUnitizeOrderItems(order) }}
+                                      disabled={unitizingOrderId === order.id || !order.items.some((item) => item.quantity > 1)}
+                                      className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-bold transition-colors ${
+                                        order.items.every((item) => item.quantity === 1)
+                                          ? 'bg-sky-500 text-zinc-950'
+                                          : 'text-sky-300 hover:bg-sky-500/15'
+                                      } disabled:cursor-default disabled:opacity-100`}
+                                      title="수량이 여러 장인 품목을 수량 1 단위로 분리합니다"
+                                    >
+                                      {unitizingOrderId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Layers className="h-3 w-3" />}
+                                      각 카드별
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                              {unitizeErrorByOrderId[order.id] && (
+                                <p className="rounded-lg bg-red-950/60 px-3 py-2 text-xs text-red-300">{unitizeErrorByOrderId[order.id]}</p>
+                              )}
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
                                 <div>
                                   <span className="text-xs font-semibold text-zinc-400">정산 방식 일괄 변경</span>
@@ -2849,6 +2905,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {activeTab === 'settings' && (
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-8">
+                <WindowModeSetting />
+                <div className="border-t border-zinc-800" />
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
                     <Settings2 className="h-4 w-4 text-zinc-400" />관리자 비밀번호 변경
