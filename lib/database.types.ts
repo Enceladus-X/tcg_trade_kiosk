@@ -35,6 +35,7 @@ export type DbTab = {
 export type DbOrder = {
   id: string
   created_at: string
+  client_request_id?: string | null
   customer_name: string
   bank_name: string
   account_number: string
@@ -54,7 +55,13 @@ export type DbStoreSettings = {
   admin_password: string
   mileage_rate: number
   global_rarities: string[]
+  feature_flags?: StoreFeatureFlags | null
   updated_at: string
+}
+
+export type StoreFeatureFlags = {
+  public_buyback_enabled: boolean
+  shipping_buyback_enabled: boolean
 }
 
 export type DbOrderItem = {

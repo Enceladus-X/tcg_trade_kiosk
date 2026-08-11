@@ -164,5 +164,5 @@ tcg_trade_kiosk/
 
 ## 문서
 
-- 릴리스 노트: [release-notes](C:\Users\Holick\Desktop\Files\TASKS\PROJECTS\tcg_trade_kiosk\release-notes)
+- 릴리스 노트: [release-notes](D:\Files\TASKS\PROJECTS\tcg_trade_kiosk\release-notes)
 - GitHub 릴리스: [Releases](https://github.com/Enceladus-X/tcg_trade_kiosk/releases)

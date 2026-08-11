@@ -66,6 +66,11 @@ function calculateOrderTotal(items: Pick<CartItem, 'price' | 'quantity' | 'payme
   }, 0)
 }
 
+export function createClientRequestId() {
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) return window.crypto.randomUUID()
+  return `order-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
 // --- 타입 변환 ---
 
 function dbToOrder(
@@ -124,6 +129,19 @@ function isMissingDeclarationColumnError(error: unknown): boolean {
     maybeError.message.includes("'declared_condition' column") ||
     maybeError.message.includes("'declared_defects' column")
   )
+}
+
+function isMissingClientRequestIdColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === 'PGRST204' && typeof maybeError.message === 'string' && maybeError.message.includes("'client_request_id' column")
+}
+
+function isDuplicateClientRequestError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string; details?: string }
+  const message = [maybeError.message, maybeError.details].filter(Boolean).join(' ')
+  return maybeError.code === '23505' && message.includes('client_request_id')
 }
 
 const ORDERS_KEY = ['orders'] as const
@@ -221,11 +239,19 @@ export function useOrders() {
       items,
       customerData,
       mileageRate,
+      requestId,
     }: {
       items: CartItem[]
       customerData: CheckoutFormData
       mileageRate?: number
+      requestId?: string
     }) => {
+      if (items.length === 0) throw new Error('매입할 카드가 없습니다.')
+      if (items.some((item) => item.quantity < 1 || item.quantity > 999 || item.price < 0)) {
+        throw new Error('카드 수량 또는 가격이 올바르지 않습니다.')
+      }
+
+      const clientRequestId = requestId ?? createClientRequestId()
       const orderPaymentMethod = deriveOrderPaymentMethod(items)
       const persistedOrderPaymentMethod = getPersistedOrderPaymentMethod(orderPaymentMethod)
       const hasCashItems = items.some((item) => item.paymentMethod === 'cash')
@@ -234,24 +260,50 @@ export function useOrders() {
 
       // 마일리지 결제는 은행/계좌 정보 불필요 → 빈 문자열로 저장
       // (orders.bank_name / account_number 가 NOT NULL 이므로 '' 사용)
-      const bankName = hasCashItems ? customerData.bankName : ''
-      const accountNumber = hasCashItems ? customerData.accountNumber : ''
+      const bankName = hasCashItems ? customerData.bankName.trim() : ''
+      const accountNumber = hasCashItems ? customerData.accountNumber.replace(/\D/g, '') : ''
+      const customerName = customerData.name.trim()
+      const phoneNumber = customerData.phoneNumber.replace(/\D/g, '')
+      if (!customerName || phoneNumber.length < 10 || (hasCashItems && (!bankName || accountNumber.length < 6))) {
+        throw new Error('고객 정보가 완전하지 않습니다.')
+      }
 
       // 1단계: orders 행 삽입
-      const { data: order, error: orderError } = await supabase
+      const orderPayload = {
+        customer_name: customerName,
+        bank_name: bankName,
+        account_number: accountNumber,
+        phone_number: phoneNumber,
+        total_price: finalTotal,
+        status: 'pending' as const,
+        payment_method: persistedOrderPaymentMethod,
+        mileage_rate: hasMileageItems ? (mileageRate ?? null) : null,
+        client_request_id: clientRequestId,
+      }
+
+      let { data: order, error: orderError } = await supabase
         .from('orders')
-        .insert({
-          customer_name: customerData.name,
-          bank_name: bankName,
-          account_number: accountNumber,
-          phone_number: customerData.phoneNumber,
-          total_price: finalTotal,
-          status: 'pending',
-          payment_method: persistedOrderPaymentMethod,
-          mileage_rate: hasMileageItems ? (mileageRate ?? null) : null,
-        })
+        .insert(orderPayload)
         .select()
         .single()
+
+      if (orderError && isMissingClientRequestIdColumnError(orderError)) {
+        const { client_request_id: _clientRequestId, ...legacyOrderPayload } = orderPayload
+        ;({ data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert(legacyOrderPayload)
+          .select()
+          .single())
+      }
+
+      if (orderError && isDuplicateClientRequestError(orderError)) {
+        const { data: existingOrder, error: existingOrderError } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .eq('client_request_id', clientRequestId)
+          .single()
+        if (!existingOrderError && existingOrder) return existingOrder
+      }
       if (orderError) throw orderError
 
       // 2단계: order_items 일괄 삽입
@@ -281,7 +333,11 @@ export function useOrders() {
           .insert(itemPayload.map(({ payment_method, ...rest }) => rest))
           .select('id'))
       }
-      if (itemsError) throw itemsError
+      if (itemsError) {
+        // Do not leave an orphan pending order when the second insert fails.
+        await supabase.from('orders').delete().eq('id', order.id)
+        throw itemsError
+      }
 
       if (Array.isArray(insertedItems)) {
         insertedItems.forEach((insertedItem, index) => {
@@ -696,8 +752,8 @@ export function useOrders() {
     paidOrders,
     pendingCount: pendingOrders.length,
     createOrder: useCallback(
-      (items: CartItem[], customerData: CheckoutFormData, mileageRate?: number) =>
-        createMutation.mutateAsync({ items, customerData, mileageRate }),
+      (items: CartItem[], customerData: CheckoutFormData, mileageRate?: number, requestId?: string) =>
+        createMutation.mutateAsync({ items, customerData, mileageRate, requestId }),
       [createMutation]
     ),
     updateOrderStatus: useCallback(

@@ -13,6 +13,7 @@ import { VersionChip } from '@/components/version-chip'
 import { useCart } from '@/lib/use-cart'
 import { type CardWithStatus } from '@/lib/mock-cards'
 import { useStoreSettings } from '@/lib/use-settings'
+import { hasValidAdminSession, touchAdminSession } from '@/lib/admin-session'
 
 const KST_TIME_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   hour: '2-digit',
@@ -51,8 +52,32 @@ export default function POSPage() {
     const params = new URLSearchParams(window.location.search)
     if (params.get('admin') !== 'orders') return
 
-    setShowGlobalPinOverlay(true)
+    if (hasValidAdminSession()) setGlobalAdminModalOpen(true)
+    else setShowGlobalPinOverlay(true)
   }, [])
+
+  useEffect(() => {
+    if (!globalAdminModalOpen) return
+
+    const handleActivity = () => touchAdminSession()
+    const checkSession = () => {
+      if (!hasValidAdminSession()) {
+        setGlobalAdminModalOpen(false)
+        setShowGlobalPinOverlay(true)
+      }
+    }
+
+    window.addEventListener('pointerdown', handleActivity)
+    window.addEventListener('keydown', handleActivity)
+    window.addEventListener('mousemove', handleActivity)
+    const timer = window.setInterval(checkSession, 30_000)
+    return () => {
+      window.removeEventListener('pointerdown', handleActivity)
+      window.removeEventListener('keydown', handleActivity)
+      window.removeEventListener('mousemove', handleActivity)
+      window.clearInterval(timer)
+    }
+  }, [globalAdminModalOpen])
 
   useEffect(() => {
     if (!isOnline || isFetching) return
@@ -112,7 +137,10 @@ export default function POSPage() {
 
       <div className="fixed bottom-6 left-6 z-30">
         <button
-          onClick={() => setShowGlobalPinOverlay(true)}
+          onClick={() => {
+            if (hasValidAdminSession()) setGlobalAdminModalOpen(true)
+            else setShowGlobalPinOverlay(true)
+          }}
           aria-label="환경설정"
           data-testid="settings-button"
           className="flex h-20 w-20 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900/95 text-zinc-300 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all hover:bg-zinc-800 hover:text-white active:scale-95"

@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Banknote, Check, Coins, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { useCart } from '@/lib/use-cart'
-import { useOrders } from '@/lib/use-orders'
+import { createClientRequestId, useOrders } from '@/lib/use-orders'
 import { useStoreSettings } from '@/lib/use-settings'
 import { formatPrice, getRarityColors, type CheckoutFormData, type PaymentMethod } from '@/lib/mock-cards'
 
@@ -69,7 +69,8 @@ function formatMileageBonusPercent(rate: number) {
 export function CartListModal({ onClose }: CartListModalProps) {
   const { items, updateQuantity, updatePaymentMethod, setAllPaymentMethods, removeItem, clearCart } = useCart()
   const { createOrder } = useOrders()
-  const { mileageRate } = useStoreSettings()
+  const { mileageRate, featureFlags } = useStoreSettings()
+  const requestIdRef = useRef(createClientRequestId())
 
   const [step, setStep] = useState<'list' | 'checkout' | 'success'>('list')
   const [formData, setFormData] = useState<CheckoutFormData>({
@@ -116,10 +117,14 @@ export function CartListModal({ onClose }: CartListModalProps) {
   }
 
   const handleSubmit = async () => {
+    if (!featureFlags.public_buyback_enabled) {
+      setSubmitError('현재 매입 접수가 잠시 중단되어 있습니다. 잠시 후 다시 시도해 주세요.')
+      return
+    }
     if (!validateForm()) return
     setSubmitError(null)
     try {
-      await createOrder(items, formData, hasMileageItems ? mileageRate : undefined)
+      await createOrder(items, formData, hasMileageItems ? mileageRate : undefined, requestIdRef.current)
       setStep('success')
       setTimeout(() => {
         clearCart()

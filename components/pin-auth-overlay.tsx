@@ -3,6 +3,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Delete, Lock, Loader2 } from 'lucide-react'
 import { useStoreSettings } from '@/lib/use-settings'
+import { supabase } from '@/lib/supabase'
+import {
+  clearAdminPinFailures,
+  getAdminPinLockout,
+  registerAdminPinFailure,
+  setAdminSession,
+} from '@/lib/admin-session'
 
 interface PinAuthOverlayProps {
   onSuccess: () => void
@@ -17,56 +24,96 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
 
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
+  const [lockoutUntil, setLockoutUntil] = useState(() => getAdminPinLockout().lockedUntil)
+  const [lockoutSeconds, setLockoutSeconds] = useState(0)
+  const [usingLegacyFallback, setUsingLegacyFallback] = useState(false)
+
+  const lockoutActive = lockoutUntil > Date.now()
+  const disabledByLockout = lockoutActive || lockoutSeconds > 0
+
+  useEffect(() => {
+    const update = () => {
+      const next = getAdminPinLockout()
+      setLockoutUntil(next.lockedUntil)
+      setLockoutSeconds(Math.max(0, Math.ceil((next.lockedUntil - Date.now()) / 1000)))
+    }
+    update()
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const verifyPin = useCallback(async (inputPin: string) => {
+    // The RPC keeps the PIN hash and lockout counter on the database. A missing
+    // RPC is treated as a rollout fallback so an already deployed kiosk is not
+    // locked out while the migration is being applied.
+    const { data, error: rpcError } = await supabase.rpc('verify_admin_pin', { input_pin: inputPin })
+    if (!rpcError && data && typeof data === 'object') {
+      const result = data as { authenticated?: boolean; session_ttl_seconds?: number }
+      setUsingLegacyFallback(false)
+      if (result.authenticated) {
+        setAdminSession(result.session_ttl_seconds)
+        clearAdminPinFailures()
+      }
+      return Boolean(result.authenticated)
+    }
+
+    setUsingLegacyFallback(true)
+    const api = (window as any).electronAPI
+    const authenticated = isError && api?.verifyPin
+      ? Boolean(await api.verifyPin(inputPin))
+      : correctPin.length > 0 && inputPin === correctPin
+    if (authenticated) {
+      setAdminSession()
+      clearAdminPinFailures()
+    }
+    return authenticated
+  }, [correctPin, isError])
 
   const handleNumberClick = useCallback(async (num: string) => {
-    if (disabled || pin.length >= 4) return
+    if (disabled || disabledByLockout || pin.length >= 4) return
     const newPin = pin + num
     setPin(newPin)
     setError(false)
 
     if (newPin.length === 4) {
-      let correct = false
-      const api = (window as any).electronAPI
-      if (isError && api?.verifyPin) {
-        correct = await api.verifyPin(newPin)
-      } else {
-        correct = correctPin.length > 0 && newPin === correctPin
-      }
+      const correct = await verifyPin(newPin)
 
       if (correct) {
         onSuccess()
       } else {
         setError(true)
+        const nextLockout = registerAdminPinFailure()
+        setLockoutUntil(nextLockout.lockedUntil)
         setTimeout(() => {
           setPin('')
           setError(false)
         }, 500)
       }
     }
-  }, [disabled, pin, correctPin, onSuccess])
+  }, [disabled, disabledByLockout, pin, onSuccess, verifyPin])
 
   const handleDelete = useCallback(() => {
-    if (disabled) return
+    if (disabled || disabledByLockout) return
     setPin(prev => prev.slice(0, -1))
     setError(false)
-  }, [disabled])
+  }, [disabled, disabledByLockout])
 
   const handleClear = useCallback(() => {
-    if (disabled) return
+    if (disabled || disabledByLockout) return
     setPin('')
     setError(false)
-  }, [disabled])
+  }, [disabled, disabledByLockout])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (disabled) return
+      if (disabled || disabledByLockout) return
       if (e.key >= '0' && e.key <= '9') handleNumberClick(e.key)
       else if (e.key === 'Backspace') handleDelete()
       else if (e.key === 'Escape') onCancel()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [disabled, handleNumberClick, handleDelete, onCancel])
+  }, [disabled, disabledByLockout, handleNumberClick, handleDelete, onCancel])
 
   return (
     <div
@@ -88,10 +135,13 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
         <div className="text-center">
           <h3 className="text-lg font-semibold text-white">Admin Access</h3>
           <p className="text-sm text-zinc-500">
-            {isLoading && !isError ? '인증 정보 불러오는 중...' : 'Enter 4-digit PIN'}
+            {isLoading && !isError ? '인증 정보 불러오는 중...' : lockoutSeconds > 0 ? `${Math.ceil(lockoutSeconds / 60)}분 후 다시 시도해 주세요.` : 'Enter 4-digit PIN'}
           </p>
           {isError && (
             <p className="mt-1 text-xs text-amber-400">오프라인 모드 - 로컬 PIN 설정 필요</p>
+          )}
+          {usingLegacyFallback && !isError && (
+            <p className="mt-1 text-xs text-amber-400">보안 함수 배포 전 임시 인증 모드</p>
           )}
         </div>
 

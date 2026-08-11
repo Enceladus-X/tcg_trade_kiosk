@@ -17,7 +17,7 @@ import {
   X, Clock, CheckCircle, DollarSign, Trash2, Phone, Building2, CreditCard,
   Plus, Minus, ChevronDown, ChevronUp, Layers, Search, Ban, Play, Copy, Check,
   Settings2, Coins, Pencil, ImagePlus, Loader2, BarChart2, TrendingUp, Scissors,
-  MessageSquare, Table2, Download, Upload, Printer, FileText, Banknote,
+  MessageSquare, Table2, Download, Upload, Printer, FileText, Banknote, ShieldCheck,
 } from 'lucide-react'
 import { useOrders } from '@/lib/use-orders'
 import { useCards, useTabs } from '@/lib/use-cards'
@@ -335,7 +335,7 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const { cards, addCard, setCardStopped, toggleRarity, updateCardAsync } = useCards()
   const { tabs, tabObjects, addTab, removeTab, isAddingTab, addTabError } = useTabs()
   const { games, addGame, removeGame, updateGameImage, assignTabToGame, isAdding: isAddingGame } = useGames()
-  const { mileageRate, mileagePercent, globalRarities, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
+  const { mileageRate, mileagePercent, globalRarities, featureFlags, setMileagePercent, addRarity, removeRarity, updateSettings, isUpdating } = useStoreSettings()
   const availableRarities: readonly string[] = globalRarities.length > 0 ? globalRarities : ALL_RARITIES
   const cardById = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards])
   const cardImageById = useMemo(() => new Map(cards.map(card => [card.id, card.imageUrl])), [cards])
@@ -2906,6 +2906,51 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
             <div className="p-6">
               <div className="mx-auto max-w-lg space-y-8">
                 <WindowModeSetting />
+                <div className="border-t border-zinc-800" />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />서비스 안전 잠금
+                  </label>
+                  <p className="text-xs text-zinc-500">고객 화면에서 매입 접수를 즉시 잠그거나 다시 열 수 있습니다.</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({
+                        feature_flags: {
+                          ...featureFlags,
+                          public_buyback_enabled: !featureFlags.public_buyback_enabled,
+                        },
+                      })}
+                      disabled={isUpdating}
+                      className={`rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-40 ${
+                        featureFlags.public_buyback_enabled
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15'
+                          : 'border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/15'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">고객 매입 접수</span>
+                      <span className="mt-1 block text-xs opacity-75">{featureFlags.public_buyback_enabled ? '현재 열림' : '현재 잠금'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({
+                        feature_flags: {
+                          ...featureFlags,
+                          shipping_buyback_enabled: !featureFlags.shipping_buyback_enabled,
+                        },
+                      })}
+                      disabled={isUpdating}
+                      className={`rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-40 ${
+                        featureFlags.shipping_buyback_enabled
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15'
+                          : 'border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">택배 매입 접수</span>
+                      <span className="mt-1 block text-xs opacity-75">{featureFlags.shipping_buyback_enabled ? '현재 열림' : '현재 잠금'}</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="border-t border-zinc-800" />
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-zinc-300">

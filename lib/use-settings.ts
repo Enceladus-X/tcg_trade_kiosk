@@ -3,7 +3,7 @@
 import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
-import type { DbStoreSettings } from './database.types'
+import type { DbStoreSettings, StoreFeatureFlags } from './database.types'
 
 export const SETTINGS_KEY = ['store_settings'] as const
 
@@ -11,6 +11,15 @@ const DEFAULT_SETTINGS: Omit<DbStoreSettings, 'id' | 'updated_at'> = {
   admin_password: '',
   mileage_rate: 1.2,
   global_rarities: ['N', 'R', 'SR', 'UR', 'UL', 'SE', 'PSE'],
+  feature_flags: {
+    public_buyback_enabled: true,
+    shipping_buyback_enabled: false,
+  },
+}
+
+const DEFAULT_FEATURE_FLAGS: StoreFeatureFlags = {
+  public_buyback_enabled: true,
+  shipping_buyback_enabled: false,
 }
 
 // 배율 <-> % 변환 유틸
@@ -50,6 +59,10 @@ export function useStoreSettings() {
   })
 
   const currentRarities = settings?.global_rarities ?? DEFAULT_SETTINGS.global_rarities
+  const featureFlags: StoreFeatureFlags = {
+    ...DEFAULT_FEATURE_FLAGS,
+    ...(settings?.feature_flags ?? {}),
+  }
 
   const updateSettings = useCallback(
     (patch: Partial<Omit<DbStoreSettings, 'id' | 'updated_at'>>) =>
@@ -93,6 +106,7 @@ export function useStoreSettings() {
     mileagePercent: rateToPercent(settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate),
     adminPassword: settings?.admin_password ?? DEFAULT_SETTINGS.admin_password,
     globalRarities: currentRarities,
+    featureFlags,
     updateSettings,
     addRarity,
     removeRarity,
