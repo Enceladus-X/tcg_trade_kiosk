@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { type PendingOrder, type CheckoutFormData, type CartItem, type OrderStatus, type PaymentMethod, type OrderPaymentMethod } from './mock-cards'
 import { type DbOrder, type DbOrderItemAdjustment } from './database.types'
@@ -146,6 +146,7 @@ function isDuplicateClientRequestError(error: unknown): boolean {
 
 const ORDERS_KEY = ['orders'] as const
 const ORDER_ADJUSTMENTS_KEY = ['order-item-adjustments'] as const
+const ORDER_HISTORY_PAGE_SIZE = 100
 
 export type OrderItemAdjustment = {
   id: string
@@ -188,34 +189,66 @@ function isMissingAdjustmentsTableError(error: unknown): boolean {
 export function useOrders() {
   const queryClient = useQueryClient()
 
-  const { data: orders = [] } = useQuery({
+  const {
+    data: orderHistory,
+    fetchNextPage: fetchNextOrderPage,
+    hasNextPage: hasMoreOrderPages = false,
+    isFetchingNextPage: isFetchingNextOrderPage = false,
+  } = useInfiniteQuery({
     queryKey: ORDERS_KEY,
-    queryFn: async () => {
-      const { data, error } = await supabase
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const offset = typeof pageParam === 'number' ? pageParam : 0
+      const { data, error, count } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .order('created_at', { ascending: false })
+        .range(offset, offset + ORDER_HISTORY_PAGE_SIZE - 1, { count: 'exact' })
       if (error) throw error
       const localNotesByItemId = readLocalOrderItemNotes()
       const localPaymentMethodsByItemId = readLocalOrderItemPaymentMethods()
-      return (data as DbOrder[]).map((row) => dbToOrder(row, localNotesByItemId, localPaymentMethodsByItemId))
+      return {
+        orders: (data as DbOrder[]).map((row) => dbToOrder(row, localNotesByItemId, localPaymentMethodsByItemId)),
+        offset,
+        total: count,
+      }
+    },
+    getNextPageParam: (lastPage, pages) => {
+      const loadedCount = pages.reduce((sum, page) => sum + page.orders.length, 0)
+      if (lastPage.orders.length === 0 || (lastPage.total !== undefined && loadedCount >= lastPage.total)) return undefined
+      return lastPage.offset + lastPage.orders.length
     },
   })
 
+  const orders = useMemo(
+    () => orderHistory?.pages.flatMap((page) => page.orders) ?? [],
+    [orderHistory],
+  )
+  const totalOrderCount = orderHistory?.pages.at(0)?.total ?? orders.length
+  const orderIds = useMemo(() => orders.map((order) => order.id), [orders])
+
   const { data: priceAdjustmentsByOrderId = {} } = useQuery({
-    queryKey: ORDER_ADJUSTMENTS_KEY,
+    queryKey: [...ORDER_ADJUSTMENTS_KEY, orderIds],
+    enabled: orderIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('order_item_adjustments')
-        .select('*')
-        .order('changed_at', { ascending: false })
+      const rows = await Promise.all(
+        Array.from({ length: Math.ceil(orderIds.length / 500) }, (_, index) => orderIds.slice(index * 500, (index + 1) * 500))
+          .map(async (orderIdBatch) => {
+            const { data, error } = await supabase
+              .from('order_item_adjustments')
+              .select('*')
+              .in('order_id', orderIdBatch)
+              .order('changed_at', { ascending: false })
 
-      if (error) {
-        if (isMissingAdjustmentsTableError(error)) return {}
-        throw error
-      }
+            if (error) {
+              if (isMissingAdjustmentsTableError(error)) return [] as DbOrderItemAdjustment[]
+              throw error
+            }
+            return data as DbOrderItemAdjustment[]
+          }),
+      )
 
-      return (data as DbOrderItemAdjustment[]).reduce<Record<string, OrderItemAdjustment[]>>((acc, row) => {
+      return rows.flat().reduce<Record<string, OrderItemAdjustment[]>>((acc, row) => {
         const mapped = dbToAdjustment(row)
         acc[mapped.orderId] = [...(acc[mapped.orderId] ?? []), mapped]
         return acc
@@ -767,6 +800,10 @@ export function useOrders() {
 
   return {
     orders,
+    totalOrderCount,
+    hasMoreOrderPages,
+    isFetchingNextOrderPage,
+    fetchNextOrderPage,
     priceAdjustmentsByOrderId,
     pendingOrders,
     approvedOrders,

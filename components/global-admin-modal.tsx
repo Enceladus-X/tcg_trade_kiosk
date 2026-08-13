@@ -85,8 +85,6 @@ const ORDER_STATUS_FILTERS: { key: OrderStatus | 'all'; label: string }[] = [
   { key: 'paid',     label: '지급완료' },
   { key: 'rejected', label: '거절됨' },
 ]
-const ORDER_PAGE_SIZE = 30
-
 const buildEmptyEnabled = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, false]))
 const buildEmptyPrices = (rarities: readonly string[]) => Object.fromEntries(rarities.map(r => [r, 0]))
 
@@ -322,6 +320,10 @@ type AdminTab = 'orders' | 'add-card' | 'cards' | 'game-tabs' | 'stats' | 'setti
 export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
   const {
     orders,
+    totalOrderCount,
+    hasMoreOrderPages,
+    isFetchingNextOrderPage,
+    fetchNextOrderPage,
     priceAdjustmentsByOrderId,
     updateOrderStatus,
     updateItemPrices,
@@ -378,7 +380,6 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
 
   // 매입 요청 필터
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'all'>('all')
-  const [orderDisplayLimit, setOrderDisplayLimit] = useState(ORDER_PAGE_SIZE)
 
   // 가격/메모 조정 상태
   const [adjustedPrices, setAdjustedPrices] = useState<Record<string, Record<string, string>>>({})
@@ -1305,15 +1306,8 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
       .filter(Boolean)
       .some((value) => value.toLowerCase().includes(query))
   }), [deferredOrderSearch, orderStatusFilter, orders])
-  const visibleOrders = useMemo(
-    () => filteredOrders.slice(0, orderDisplayLimit),
-    [filteredOrders, orderDisplayLimit]
-  )
-  const hasMoreOrders = visibleOrders.length < filteredOrders.length
-
-  useEffect(() => {
-    setOrderDisplayLimit(ORDER_PAGE_SIZE)
-  }, [deferredOrderSearch, orderStatusFilter])
+  const visibleOrders = filteredOrders
+  const hasMoreOrders = hasMoreOrderPages
 
   // 통계
   const today = new Date()
@@ -1663,6 +1657,9 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   <span>
                     {filteredOrders.length.toLocaleString('ko-KR')}건 중 {visibleOrders.length.toLocaleString('ko-KR')}건 표시
                   </span>
+                  <span className="rounded-full bg-zinc-800 px-2 py-1 text-zinc-400">
+                    전체 {totalOrderCount.toLocaleString('ko-KR')}건 중 {orders.length.toLocaleString('ko-KR')}건 불러옴
+                  </span>
                   {hasMoreOrders && (
                     <span className="rounded-full bg-zinc-800 px-2 py-1 text-zinc-400">
                       아래에서 더 보기 가능
@@ -1676,6 +1673,16 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
                     <Clock className="h-8 w-8 text-zinc-600" />
                   </div>
+                  {hasMoreOrders && (
+                    <button
+                      type="button"
+                      onClick={() => { void fetchNextOrderPage() }}
+                      disabled={isFetchingNextOrderPage}
+                      className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-300 transition-colors hover:border-amber-500/50 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {isFetchingNextOrderPage ? '다음 주문을 불러오는 중…' : '검색 범위를 넓히려면 다음 페이지 불러오기'}
+                    </button>
+                  )}
                   <p className="mt-4 text-lg font-medium text-zinc-400">매입 요청이 없습니다</p>
                 </div>
               ) : (
@@ -2339,10 +2346,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
                   {hasMoreOrders && (
                     <button
                       type="button"
-                      onClick={() => setOrderDisplayLimit((limit) => limit + ORDER_PAGE_SIZE)}
-                      className="w-full rounded-xl border border-zinc-700 bg-zinc-800/70 px-4 py-3 text-sm font-semibold text-zinc-300 transition-colors hover:border-amber-500/50 hover:bg-zinc-800 hover:text-white"
+                      onClick={() => { void fetchNextOrderPage() }}
+                      disabled={isFetchingNextOrderPage}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-800/70 px-4 py-3 text-sm font-semibold text-zinc-300 transition-colors hover:border-amber-500/50 hover:bg-zinc-800 hover:text-white disabled:cursor-wait disabled:opacity-60"
                     >
-                      매입 요청 {Math.min(ORDER_PAGE_SIZE, filteredOrders.length - visibleOrders.length).toLocaleString('ko-KR')}건 더 보기
+                      {isFetchingNextOrderPage ? '다음 주문을 불러오는 중…' : '다음 주문 페이지 불러오기'}
                     </button>
                   )}
                 </div>
@@ -2765,6 +2773,11 @@ export function GlobalAdminModal({ onClose }: GlobalAdminModalProps) {
           {activeTab === 'stats' && (
             <div className="p-6">
               <div ref={statsCaptureRef} className="space-y-5 rounded-2xl bg-zinc-900 p-1">
+                {hasMoreOrders && (
+                  <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    통계는 현재 불러온 최근 {orders.length.toLocaleString('ko-KR')}건 기준입니다. 전체 {totalOrderCount.toLocaleString('ko-KR')}건을 반영하려면 주문 이력에서 다음 페이지를 모두 불러오세요.
+                  </p>
+                )}
                 <div className="flex items-center gap-3">
                   <div className="flex flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 p-1">
                     {(['today', 'week', 'month', 'all'] as const).map((range) => (

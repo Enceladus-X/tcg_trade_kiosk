@@ -7,6 +7,8 @@ type GatewayError = {
 type GatewayResult<T> = {
   data: T | null
   error: GatewayError | null
+  /** Present only when the gateway was asked to count a paginated selection. */
+  count?: number
 }
 
 type GatewayPayload = Record<string, unknown>
@@ -40,7 +42,9 @@ async function request<T>(action: string, payload: GatewayPayload): Promise<Gate
   try {
     const raw = asObject(await bridge().kioskGatewayRequest({ schemaVersion: 1, action, payload }))
     if (raw.ok !== true) return { data: null, error: errorFrom(raw.error, 'Kiosk gateway request failed.') }
-    return { data: (raw.data ?? null) as T | null, error: null }
+    const meta = asObject(raw.meta)
+    const count = typeof meta.total === 'number' && Number.isFinite(meta.total) ? meta.total : undefined
+    return { data: (raw.data ?? null) as T | null, error: null, ...(count === undefined ? {} : { count }) }
   } catch (error) {
     return { data: null, error: errorFrom(error, 'Kiosk gateway request failed.') }
   }
@@ -54,6 +58,7 @@ class QueryBuilder<T = unknown> implements PromiseLike<GatewayResult<T>> {
   private values: unknown
   private readonly filters: Filters = {}
   private orderBy: { column: string; ascending?: boolean } | undefined
+  private pagination: { limit: number; offset: number; count?: 'exact' } | undefined
 
   constructor(private readonly table: string) {}
 
@@ -95,6 +100,18 @@ class QueryBuilder<T = unknown> implements PromiseLike<GatewayResult<T>> {
     return this
   }
 
+  /**
+   * Requests a bounded result set from the kiosk gateway.  This mirrors the
+   * Supabase range API while keeping row-count work explicit at each callsite.
+   */
+  range(from: number, to: number, options: { count?: 'exact' } = {}): this {
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) {
+      throw new Error('Kiosk query range is invalid.')
+    }
+    this.pagination = { limit: to - from + 1, offset: from, count: options.count }
+    return this
+  }
+
   async single(): Promise<GatewayResult<T>> {
     const result = await this.execute()
     if (result.error) return result
@@ -113,6 +130,7 @@ class QueryBuilder<T = unknown> implements PromiseLike<GatewayResult<T>> {
       values: this.values,
       filters: this.filters,
       order: this.orderBy,
+      pagination: this.pagination,
     })
     return result
   }
