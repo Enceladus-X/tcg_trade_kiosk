@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { memo, useState, useMemo, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, Power, Search, X } from 'lucide-react'
@@ -401,8 +401,9 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(index * 0.02, 0.18), duration: 0.12 }}
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '18rem 24rem' }}
                 >
-                  <CardTile card={card} onClick={() => onCardClick(card)} />
+                  <CardTile card={card} onSelectCard={onCardClick} />
                 </motion.div>
               ))}
             </div>
@@ -425,12 +426,17 @@ export function FullWidthGrid({ onCardClick, searchOpen, searchQuery, onSearchQu
   )
 }
 
-function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void }) {
+type CardTileProps = {
+  card: CardWithStatus
+  onSelectCard: (card: CardWithStatus) => void
+}
+
+const CardTile = memo(function CardTile({ card, onSelectCard }: CardTileProps) {
   const activePrices = getActivePrices(card)
 
   return (
     <button
-      onClick={onClick}
+      onClick={() => onSelectCard(card)}
       aria-label={`${card.name} 카드 상세 보기`}
       data-testid={`card-tile-${card.code}`}
       className="group relative w-full overflow-hidden rounded-xl bg-zinc-900 transition-all active:scale-95 hover:ring-2 hover:ring-amber-500"
@@ -455,7 +461,7 @@ function CardTile({ card, onClick }: { card: CardWithStatus; onClick: () => void
       {!card.isStopped && activePrices.length > 0 && <PriceOverlay prices={activePrices} />}
     </button>
   )
-}
+})
 
 const RARITY_BADGE: Record<string, { bg: string; color: string }> = {
   N: { bg: 'rgba(82,82,91,0.95)', color: '#e4e4e7' },

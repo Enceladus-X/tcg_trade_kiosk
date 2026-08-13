@@ -1,8 +1,13 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { queryClient } from '@/lib/query-client'
+
+const ReactQueryDevtools = dynamic(
+  () => import('@tanstack/react-query-devtools').then((module) => module.ReactQueryDevtools),
+  { ssr: false },
+)
 
 // Full-table Postgres Changes subscriptions were responsible for the majority
 // of operational database work. Queries now refresh explicitly after writes.

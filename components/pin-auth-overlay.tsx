@@ -15,6 +15,10 @@ interface PinAuthOverlayProps {
   onCancel: () => void
 }
 
+function lockoutSecondsRemaining(lockedUntil: number) {
+  return Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
+}
+
 export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
   const { isLoading } = useStoreSettings()
   const disabled = isLoading
@@ -25,17 +29,14 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
 
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
-  const [lockoutUntil, setLockoutUntil] = useState(() => getAdminPinLockout().lockedUntil)
-  const [lockoutSeconds, setLockoutSeconds] = useState(0)
+  const [lockoutSeconds, setLockoutSeconds] = useState(() => lockoutSecondsRemaining(getAdminPinLockout().lockedUntil))
 
-  const lockoutActive = lockoutUntil > Date.now()
-  const disabledByLockout = lockoutActive || lockoutSeconds > 0
+  const disabledByLockout = lockoutSeconds > 0
 
   useEffect(() => {
     const update = () => {
       const next = getAdminPinLockout()
-      setLockoutUntil(next.lockedUntil)
-      setLockoutSeconds(Math.max(0, Math.ceil((next.lockedUntil - Date.now()) / 1000)))
+      setLockoutSeconds(lockoutSecondsRemaining(next.lockedUntil))
     }
     update()
     const timer = window.setInterval(update, 1000)
@@ -66,7 +67,7 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
       } else {
         setError(true)
         const nextLockout = registerAdminPinFailure()
-        setLockoutUntil(nextLockout.lockedUntil)
+        setLockoutSeconds(lockoutSecondsRemaining(nextLockout.lockedUntil))
         setTimeout(() => {
           setPin('')
           setError(false)
