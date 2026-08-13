@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { useIsFetching } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -7,13 +8,17 @@ import { RefreshCw, Search, Settings, ShoppingCart, Wifi, WifiOff, X } from 'luc
 import { CardDetailModal } from '@/components/card-detail-modal'
 import { CartListModal } from '@/components/cart-list-modal'
 import { FullWidthGrid } from '@/components/full-width-grid'
-import { GlobalAdminModal } from '@/components/global-admin-modal'
 import { PinAuthOverlay } from '@/components/pin-auth-overlay'
 import { VersionChip } from '@/components/version-chip'
 import { useCart } from '@/lib/use-cart'
 import { type CardWithStatus } from '@/lib/mock-cards'
 import { useStoreSettings } from '@/lib/use-settings'
 import { hasValidAdminSession, touchAdminSession } from '@/lib/admin-session'
+
+const GlobalAdminModal = dynamic(
+  () => import('@/components/global-admin-modal').then((module) => module.GlobalAdminModal),
+  { ssr: false },
+)
 
 const KST_TIME_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   hour: '2-digit',
