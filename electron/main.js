@@ -6,7 +6,14 @@ const fs = require('fs')
 const isProd = app.isPackaged
 const loadURL = serve({ directory: path.join(__dirname, '..', 'out') })
 
-const DEFAULT_CONFIG = { adminPin: '', windowMode: 'kiosk' }
+const DEFAULT_CONFIG = {
+  adminPin: '',
+  windowMode: 'kiosk',
+  // These values stay in the Electron main process and are never exposed to
+  // the renderer bundle. Set them in the adjacent config.json on this device.
+  gatewayUrl: '',
+  deviceToken: '',
+}
 let config = { ...DEFAULT_CONFIG }
 let mainWindow = null
 
@@ -123,6 +130,39 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('verify-pin', (_, pin) => {
   return typeof config.adminPin === 'string' && config.adminPin.length > 0 && pin === config.adminPin
+})
+ipcMain.handle('kiosk-gateway-request', async (_, request) => {
+  if (!request || typeof request !== 'object') throw new Error('Invalid kiosk gateway request.')
+  const gatewayUrl = typeof config.gatewayUrl === 'string' ? config.gatewayUrl.trim() : ''
+  const deviceToken = typeof config.deviceToken === 'string' ? config.deviceToken.trim() : ''
+  if (!gatewayUrl || !deviceToken) throw new Error('Kiosk gateway is not configured.')
+  let endpoint
+  try {
+    endpoint = new URL(gatewayUrl)
+  } catch {
+    throw new Error('Kiosk gateway URL is invalid.')
+  }
+  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && endpoint.hostname === '127.0.0.1')) {
+    throw new Error('Kiosk gateway must use HTTPS.')
+  }
+  const body = JSON.stringify(request)
+  if (Buffer.byteLength(body, 'utf8') > 7 * 1024 * 1024) throw new Error('Kiosk gateway request is too large.')
+  const result = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Marineford-Kiosk-Device': deviceToken,
+      'X-Marineford-Kiosk-Client': 'desktop',
+    },
+    body,
+  })
+  const raw = await result.text()
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new Error(`Kiosk gateway returned an invalid response (${result.status}).`)
+  }
 })
 ipcMain.handle('open-external', async (_, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false

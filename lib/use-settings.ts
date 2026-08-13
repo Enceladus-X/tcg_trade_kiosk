@@ -38,7 +38,7 @@ export function useStoreSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('store_settings')
-        .select('*')
+        .select('id,mileage_rate,global_rarities,feature_flags,updated_at')
         .eq('id', 1)
         .single()
       if (error) throw error
@@ -104,7 +104,6 @@ export function useStoreSettings() {
     lastUpdatedAt: settings?.updated_at ?? null,
     mileageRate: settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate,
     mileagePercent: rateToPercent(settings?.mileage_rate ?? DEFAULT_SETTINGS.mileage_rate),
-    adminPassword: settings?.admin_password ?? DEFAULT_SETTINGS.admin_password,
     globalRarities: currentRarities,
     featureFlags,
     updateSettings,
