@@ -1,7 +1,6 @@
 {
   "dataSource": "snapshot-images",
-  "supabaseUrl": "https://YOUR_PROJECT_ID.supabase.co",
-  "supabaseAnonKey": "YOUR_PUBLIC_ANON_KEY",
+  "gatewayUrl": "https://YOUR_PAGES_DOMAIN/api/kiosk-device",
   "submitOrders": false,
   "mileageRate": 1.1,
   "adminUrl": "http://localhost:3000/?admin=orders"

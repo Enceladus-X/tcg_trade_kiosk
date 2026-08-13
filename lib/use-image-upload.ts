@@ -24,7 +24,7 @@ export function useImageUpload({ bucket = 'card-images', prefix = 'cards' }: Use
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
     const path = `${prefix}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
 
-    const { error } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file, {
         contentType: file.type,
@@ -37,10 +37,9 @@ export function useImageUpload({ bucket = 'card-images', prefix = 'cards' }: Use
       throw new Error(error.message)
     }
 
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path)
-
     setIsUploading(false)
-    return { publicUrl: data.publicUrl, path }
+    if (!data?.publicUrl) throw new Error('이미지 업로드 주소를 받지 못했습니다.')
+    return { publicUrl: data.publicUrl, path: data.path || path }
   }, [])
 
   return { upload, isUploading, uploadError }

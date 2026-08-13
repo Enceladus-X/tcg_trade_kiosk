@@ -269,6 +269,27 @@ export function useOrders() {
       }
 
       // 1단계: orders 행 삽입
+      const { data: transactionalOrder, error: transactionalOrderError } = await supabase.rpc('submit_kiosk_counter_order_v1', {
+        input_customer_name: customerName,
+        input_bank_name: bankName,
+        input_account_number: accountNumber,
+        input_phone_number: phoneNumber,
+        input_mileage_rate: hasMileageItems ? (mileageRate ?? null) : null,
+        input_client_request_id: clientRequestId,
+        input_items: items.map((item) => ({
+          card_id: item.cardId || null,
+          card_name: item.cardName,
+          card_code: item.cardCode,
+          rarity: item.rarity,
+          price: item.price,
+          quantity: item.quantity,
+          payment_method: item.paymentMethod,
+          note: item.note ?? null,
+        })),
+      })
+      if (!transactionalOrderError && transactionalOrder) return transactionalOrder
+      if (transactionalOrderError?.code !== 'PGRST202') throw transactionalOrderError ?? new Error('주문을 저장하지 못했습니다.')
+
       const orderPayload = {
         customer_name: customerName,
         bank_name: bankName,
@@ -568,8 +589,8 @@ export function useOrders() {
         if (insertError) throw insertError
 
         const insertedIds = (insertedItems ?? [])
-          .map((insertedItem) => insertedItem?.id)
-          .filter((id): id is string => Boolean(id))
+          .map((insertedItem: { id?: unknown }) => insertedItem?.id)
+          .filter((id: unknown): id is string => typeof id === 'string' && Boolean(id))
 
         const { error: updateError } = await supabase
           .from('order_items')

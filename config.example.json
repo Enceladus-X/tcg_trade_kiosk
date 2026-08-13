@@ -1,0 +1,6 @@
+{
+  "adminPin": "SET_A_DEVICE_LOCAL_PIN",
+  "windowMode": "kiosk",
+  "gatewayUrl": "https://YOUR_PAGES_DOMAIN/api/kiosk-device",
+  "deviceToken": "SET_THE_MATCHING_PER_DEVICE_CLOUDFLARE_SECRET"
+}

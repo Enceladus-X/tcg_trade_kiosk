@@ -61,23 +61,22 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Dependencies installed
 
-REM 4. .env.local check (required for Supabase connection since v0.2.0)
+REM 4. Device gateway config check
 echo.
-if not exist ".env.local" (
-    echo [ERROR] .env.local file not found.
+if not exist "config.json" (
+    echo [ERROR] config.json file not found.
     echo.
-    echo  This file is required for Supabase connection.
-    echo  Create .env.local in this folder with the following content:
+    echo  Copy config.example.json to config.json and set the device values:
     echo.
-    echo   NEXT_PUBLIC_SUPABASE_URL=^<your-supabase-url^>
-    echo   NEXT_PUBLIC_SUPABASE_ANON_KEY=^<your-anon-key^>
+    echo   gatewayUrl=https://YOUR_PAGES_DOMAIN/api/kiosk-device
+    echo   deviceToken=^<matching Cloudflare KIOSK_DEVICE_TOKEN^>
     echo.
-    echo  Get these values from: https://supabase.com ^> Project Settings ^> API
+    echo  The device token must stay local to this kiosk. Do not use a browser Supabase key.
     echo.
     pause
     exit /b 1
 )
-echo [OK] .env.local found
+echo [OK] config.json found
 
 REM 5. Next.js build
 echo.

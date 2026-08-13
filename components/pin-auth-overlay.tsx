@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Delete, Lock, Loader2 } from 'lucide-react'
 import { useStoreSettings } from '@/lib/use-settings'
-import { supabase } from '@/lib/supabase'
 import {
   clearAdminPinFailures,
   getAdminPinLockout,
@@ -17,16 +16,17 @@ interface PinAuthOverlayProps {
 }
 
 export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
-  const { adminPassword, isLoading, isError } = useStoreSettings()
-
-  const correctPin = adminPassword ?? ''
-  const disabled = isLoading && !isError
+  const { isLoading } = useStoreSettings()
+  const disabled = isLoading
+  // Legacy remote-PIN states are intentionally disabled. The administrator
+  // credential now lives only in this device's Electron main-process config.
+  const isError = false
+  const usingLegacyFallback = false
 
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
   const [lockoutUntil, setLockoutUntil] = useState(() => getAdminPinLockout().lockedUntil)
   const [lockoutSeconds, setLockoutSeconds] = useState(0)
-  const [usingLegacyFallback, setUsingLegacyFallback] = useState(false)
 
   const lockoutActive = lockoutUntil > Date.now()
   const disabledByLockout = lockoutActive || lockoutSeconds > 0
@@ -43,31 +43,14 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
   }, [])
 
   const verifyPin = useCallback(async (inputPin: string) => {
-    // The RPC keeps the PIN hash and lockout counter on the database. A missing
-    // RPC is treated as a rollout fallback so an already deployed kiosk is not
-    // locked out while the migration is being applied.
-    const { data, error: rpcError } = await supabase.rpc('verify_admin_pin', { input_pin: inputPin })
-    if (!rpcError && data && typeof data === 'object') {
-      const result = data as { authenticated?: boolean; session_ttl_seconds?: number }
-      setUsingLegacyFallback(false)
-      if (result.authenticated) {
-        setAdminSession(result.session_ttl_seconds)
-        clearAdminPinFailures()
-      }
-      return Boolean(result.authenticated)
-    }
-
-    setUsingLegacyFallback(true)
     const api = (window as any).electronAPI
-    const authenticated = isError && api?.verifyPin
-      ? Boolean(await api.verifyPin(inputPin))
-      : correctPin.length > 0 && inputPin === correctPin
+    const authenticated = api?.verifyPin ? Boolean(await api.verifyPin(inputPin)) : false
     if (authenticated) {
       setAdminSession()
       clearAdminPinFailures()
     }
     return authenticated
-  }, [correctPin, isError])
+  }, [])
 
   const handleNumberClick = useCallback(async (num: string) => {
     if (disabled || disabledByLockout || pin.length >= 4) return
@@ -125,7 +108,7 @@ export function PinAuthOverlay({ onSuccess, onCancel }: PinAuthOverlayProps) {
       <div className="flex w-72 flex-col items-center gap-6 rounded-2xl bg-zinc-900 p-6">
         {/* Lock Icon */}
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
-          {isLoading && !isError
+          {isLoading
             ? <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
             : <Lock className="h-8 w-8 text-zinc-400" />
           }
